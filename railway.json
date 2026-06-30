@@ -10,7 +10,7 @@
     "runtime": "V2",
     "numReplicas": 1,
     "healthcheckPath": "/healthz",
-    "preDeployCommand": "node /app/packages/twenty-server/dist/database/scripts/setup-db.js && node /app/packages/twenty-server/dist/command/command run-instance-commands",
+    "preDeployCommand": "node /app/packages/twenty-server/dist/database/scripts/setup-db.js && node /app/packages/twenty-server/dist/command/command run-instance-commands --force --include-slow",
     "sleepApplication": false,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
