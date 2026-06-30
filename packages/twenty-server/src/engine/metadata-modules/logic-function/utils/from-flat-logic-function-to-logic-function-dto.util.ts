@@ -1,4 +1,5 @@
 import { type LogicFunctionDTO } from 'src/engine/metadata-modules/logic-function/dtos/logic-function.dto';
+import { LogicFunctionExecutionMode } from 'src/engine/metadata-modules/logic-function/logic-function.entity';
 import { type FlatLogicFunction } from 'src/engine/metadata-modules/logic-function/types/flat-logic-function.type';
 
 export const fromFlatLogicFunctionToLogicFunctionDto = ({
@@ -13,7 +14,7 @@ export const fromFlatLogicFunctionToLogicFunctionDto = ({
     description: flatLogicFunction.description ?? undefined,
     runtime: flatLogicFunction.runtime,
     timeoutSeconds: flatLogicFunction.timeoutSeconds,
-    executionMode: flatLogicFunction.executionMode,
+    executionMode: flatLogicFunction.executionMode ?? LogicFunctionExecutionMode.LIVE,
     sourceHandlerPath: flatLogicFunction.sourceHandlerPath,
     handlerName: flatLogicFunction.handlerName,
     applicationId: flatLogicFunction.applicationId ?? undefined,
