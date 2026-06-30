@@ -156,8 +156,15 @@ export class ClientConfigService {
       );
     }
 
+    const appLogoUrl = this.twentyConfigService.get('APP_LOGO_URL');
+
     const clientConfig: ClientConfig = {
       appVersion: this.twentyConfigService.get('APP_VERSION'),
+      appName: this.twentyConfigService.get('APP_NAME'),
+      appLogoUrl: isNonEmptyString(appLogoUrl) ? appLogoUrl : undefined,
+      isLandingPageEnabled: this.twentyConfigService.get(
+        'IS_LANDING_PAGE_ENABLED',
+      ),
       billing: {
         isBillingEnabled: this.twentyConfigService.get('IS_BILLING_ENABLED'),
         billingUrl: this.twentyConfigService.get('BILLING_PLAN_REQUIRED_LINK'),

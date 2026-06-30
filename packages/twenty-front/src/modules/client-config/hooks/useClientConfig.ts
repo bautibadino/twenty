@@ -1,6 +1,8 @@
 import { aiModelsState } from '@/client-config/states/aiModelsState';
 import { apiConfigState } from '@/client-config/states/apiConfigState';
 import { onboardingConfigState } from '@/client-config/states/onboardingConfigState';
+import { appLogoUrlState } from '@/client-config/states/appLogoUrlState';
+import { appNameState } from '@/client-config/states/appNameState';
 import { appVersionState } from '@/client-config/states/appVersionState';
 import { authProvidersState } from '@/client-config/states/authProvidersState';
 import { billingState } from '@/client-config/states/billingState';
@@ -19,6 +21,7 @@ import { isEmailVerificationRequiredState } from '@/client-config/states/isEmail
 import { isGoogleCalendarEnabledState } from '@/client-config/states/isGoogleCalendarEnabledState';
 import { isGoogleMessagingEnabledState } from '@/client-config/states/isGoogleMessagingEnabledState';
 import { isImapSmtpCaldavEnabledState } from '@/client-config/states/isImapSmtpCaldavEnabledState';
+import { isLandingPageEnabledState } from '@/client-config/states/isLandingPageEnabledState';
 import { maintenanceModeState } from '@/client-config/states/maintenanceModeState';
 import { isMicrosoftCalendarEnabledState } from '@/client-config/states/isMicrosoftCalendarEnabledState';
 import { isMicrosoftMessagingEnabledState } from '@/client-config/states/isMicrosoftMessagingEnabledState';
@@ -128,6 +131,12 @@ export const useClientConfig = (): UseClientConfigResult => {
 
   const setAppVersion = useSetAtomState(appVersionState);
 
+  const setAppName = useSetAtomState(appNameState);
+
+  const setAppLogoUrl = useSetAtomState(appLogoUrlState);
+
+  const setIsLandingPageEnabled = useSetAtomState(isLandingPageEnabledState);
+
   const fetchClientConfig = useCallback(async () => {
     setClientConfigApiStatus((prev) => ({
       ...prev,
@@ -150,6 +159,9 @@ export const useClientConfig = (): UseClientConfigResult => {
         error: undefined,
       }));
       setAppVersion(clientConfig.appVersion);
+      setAppName(clientConfig.appName ?? 'Twenty');
+      setAppLogoUrl(clientConfig.appLogoUrl);
+      setIsLandingPageEnabled(clientConfig.isLandingPageEnabled ?? false);
       setAuthProviders({
         google: clientConfig.authProviders.google,
         microsoft: clientConfig.authProviders.microsoft,
@@ -226,6 +238,9 @@ export const useClientConfig = (): UseClientConfigResult => {
     setApiConfig,
     setOnboardingConfig,
     setAppVersion,
+    setAppName,
+    setAppLogoUrl,
+    setIsLandingPageEnabled,
     setAuthProviders,
     setBilling,
     setCalendarBookingPageId,

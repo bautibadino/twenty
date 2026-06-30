@@ -4,6 +4,8 @@ import { Title } from '@/auth/components/Title';
 import { useAuth } from '@/auth/hooks/useAuth';
 import { billingCheckoutSessionState } from '@/auth/states/billingCheckoutSessionState';
 import { calendarBookingPageIdState } from '@/client-config/states/calendarBookingPageIdState';
+import { IntervalSelector } from '@/settings/billing/components/IntervalSelector';
+import { PlanSelector } from '@/settings/billing/components/PlanSelector';
 import { SubscriptionPaymentForm } from '@/settings/billing/components/SubscriptionPaymentForm';
 import { TrialCard } from '@/settings/billing/components/TrialCard';
 import { useBaseLicensedPriceByPlanKeyAndInterval } from '@/settings/billing/hooks/useBaseLicensedPriceByPlanKeyAndInterval';
@@ -19,7 +21,11 @@ import { Loader } from 'twenty-ui/feedback';
 import { CardPicker, MainButton } from 'twenty-ui/input';
 import { CAL_LINK, ClickToActionLink } from 'twenty-ui/navigation';
 import { themeCssVariables } from 'twenty-ui/theme-constants';
-import { type Billing } from '~/generated-metadata/graphql';
+import {
+  type Billing,
+  type BillingPlanKey,
+  type SubscriptionInterval,
+} from '~/generated-metadata/graphql';
 
 const StyledChooseTrialContainer = styled.div`
   display: flex;
@@ -94,6 +100,32 @@ export const ChooseYourPlanContent = ({ billing }: { billing: Billing }) => {
     successUrlPath: AppPath.PlanRequiredSuccess,
   });
 
+  const handlePlanChange = (plan: BillingPlanKey) => {
+    const availableIntervals =
+      getBaseProductByPlanKey(plan).prices?.map(
+        (price) => price.recurringInterval,
+      ) ?? [];
+
+    const nextInterval = availableIntervals.includes(
+      billingCheckoutSession.interval,
+    )
+      ? billingCheckoutSession.interval
+      : (availableIntervals[0] ?? billingCheckoutSession.interval);
+
+    setBillingCheckoutSession({
+      ...billingCheckoutSession,
+      plan,
+      interval: nextInterval,
+    });
+  };
+
+  const handleIntervalChange = (interval: SubscriptionInterval) => {
+    setBillingCheckoutSession({
+      ...billingCheckoutSession,
+      interval,
+    });
+  };
+
   const handleTrialPeriodChange = (withCreditCard: boolean) => {
     return () => {
       if (
@@ -129,6 +161,16 @@ export const ChooseYourPlanContent = ({ billing }: { billing: Billing }) => {
           </SubTitle>
         )
       )}
+      <PlanSelector
+        selectedPlan={currentPlanKey}
+        interval={billingCheckoutSession.interval}
+        onPlanChange={handlePlanChange}
+      />
+      <IntervalSelector
+        selectedPlan={currentPlanKey}
+        interval={billingCheckoutSession.interval}
+        onIntervalChange={handleIntervalChange}
+      />
       {hasWithoutCreditCardTrialPeriod && (
         <StyledChooseTrialContainer>
           {billing.trialPeriods.map((trialPeriod) => (

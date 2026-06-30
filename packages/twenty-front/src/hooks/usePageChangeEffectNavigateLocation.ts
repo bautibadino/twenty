@@ -6,6 +6,7 @@ import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { isOnboardingV2State } from '@/auth/states/isOnboardingV2State';
 import { returnToPathState } from '@/auth/states/returnToPathState';
 import { calendarBookingPageIdState } from '@/client-config/states/calendarBookingPageIdState';
+import { isLandingPageEnabledState } from '@/client-config/states/isLandingPageEnabledState';
 import { useIsCurrentLocationOnAWorkspace } from '@/domain-manager/hooks/useIsCurrentLocationOnAWorkspace';
 import { useDefaultHomePagePath } from '@/navigation/hooks/useDefaultHomePagePath';
 import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
@@ -79,12 +80,22 @@ export const usePageChangeEffectNavigateLocation = () => {
 
   const isOnboardingV2 = useAtomStateValue(isOnboardingV2State);
 
+  const isLandingPageEnabled = useAtomStateValue(isLandingPageEnabledState);
+
+  // When the public landing page is enabled, anonymous visitors are allowed to
+  // stay on the root path (/) instead of being redirected to the login page.
+  const isAnonymousOnLandingPage =
+    isLandingPageEnabled &&
+    !hasAccessTokenPair &&
+    isMatchingLocation(location, AppPath.Index);
+
   if (
     (!hasAccessTokenPair || !isOnAWorkspace || !isDefined(currentWorkspace)) &&
     !someMatchingLocationOf([
       ...ONGOING_USER_CREATION_PATHS,
       AppPath.ResetPassword,
-    ])
+    ]) &&
+    !isAnonymousOnLandingPage
   ) {
     return AppPath.SignInUp;
   }

@@ -256,6 +256,15 @@ export class ClientConfig {
   @Field(() => String, { nullable: true })
   appVersion?: string;
 
+  @Field(() => String)
+  appName: string;
+
+  @Field(() => String, { nullable: true })
+  appLogoUrl?: string;
+
+  @Field(() => Boolean)
+  isLandingPageEnabled: boolean;
+
   @Field(() => AuthProvidersDTO, { nullable: false })
   authProviders: AuthProvidersDTO;
 

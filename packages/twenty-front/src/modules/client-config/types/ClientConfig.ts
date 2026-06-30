@@ -13,6 +13,9 @@ import { type OnboardingConfig } from '@/client-config/types/OnboardingConfig';
 
 export type ClientConfig = {
   appVersion?: string;
+  appName: string;
+  appLogoUrl?: string;
+  isLandingPageEnabled: boolean;
   aiModels: Array<ClientAiModelConfig>;
   analyticsEnabled: boolean;
   api: ApiConfig;

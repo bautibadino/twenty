@@ -30,6 +30,7 @@ import { SignInUpGlobalScopeFormEffect } from '@/auth/sign-in-up/components/inte
 import { SignInUpTwoFactorAuthenticationProvision } from '@/auth/sign-in-up/components/internal/SignInUpTwoFactorAuthenticationProvision';
 import { SignInUpTOTPVerification } from '@/auth/sign-in-up/components/internal/SignInUpTwoFactorAuthenticationVerification';
 import { useWorkspaceFromInviteHash } from '@/auth/sign-in-up/hooks/useWorkspaceFromInviteHash';
+import { appNameState } from '@/client-config/states/appNameState';
 import { clientConfigApiStatusState } from '@/client-config/states/clientConfigApiStatusState';
 import { ModalContent } from 'twenty-ui/surfaces';
 import { useLingui } from '@lingui/react/macro';
@@ -91,6 +92,7 @@ export const SignInUp = () => {
   const { t } = useLingui();
   const setSignInUpStep = useSetAtomState(signInUpStepState);
   const clientConfigApiStatus = useAtomStateValue(clientConfigApiStatusState);
+  const appName = useAtomStateValue(appNameState);
 
   const { form } = useSignInUpForm();
   const { signInUpStep } = useSignInUp(form);
@@ -136,7 +138,7 @@ export const SignInUp = () => {
     }
 
     if (isGlobalScope) {
-      return t`Welcome to Twenty`;
+      return t`Welcome to ${appName}`;
     }
 
     const workspaceName = workspacePublicData?.displayName;
@@ -151,6 +153,7 @@ export const SignInUp = () => {
     signInUpStep,
     workspacePublicData?.displayName,
     isGlobalScope,
+    appName,
     t,
     workspaceFromInviteHash?.displayName,
   ]);

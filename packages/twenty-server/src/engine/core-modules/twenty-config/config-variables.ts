@@ -479,6 +479,16 @@ export class ConfigVariables {
   IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS = true;
 
   @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.ADVANCED_SETTINGS,
+    description:
+      'Maximum number of workspaces that can be created without a valid enterprise key. Set high (or to a large number) when running as a multi-tenant SaaS. Defaults to 5.',
+    type: ConfigVariableType.NUMBER,
+  })
+  @CastToPositiveNumber()
+  @IsOptional()
+  MAX_WORKSPACES_LIMIT = 5;
+
+  @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.SERVER_CONFIG,
     description:
       'Deployment region that determines the contracting DPA Processor entity, hosting region and governing law. EU (default) = Twenty.com SAS / Frankfurt / France; US = Twenty, Inc. / United States. Must match where Customer Personal Data actually lives.',
@@ -983,6 +993,33 @@ export class ConfigVariables {
   })
   @ValidateIf((env) => env.IS_MULTIWORKSPACE_ENABLED)
   DEFAULT_SUBDOMAIN = 'app';
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.SERVER_CONFIG,
+    description:
+      'Product name shown across the UI (login page, sidebar) and emails. Defaults to "Twenty".',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  APP_NAME = 'Twenty';
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.SERVER_CONFIG,
+    description:
+      'Absolute URL of the product logo shown on the login page and emails. Falls back to the default Twenty logo when empty.',
+    type: ConfigVariableType.STRING,
+  })
+  @IsOptional()
+  APP_LOGO_URL?: string;
+
+  @ConfigVariablesMetadata({
+    group: ConfigVariablesGroup.SERVER_CONFIG,
+    description:
+      'When enabled, the root path (/) serves a public marketing landing page (with a CTA to sign up) instead of redirecting anonymous visitors to the login page.',
+    type: ConfigVariableType.BOOLEAN,
+  })
+  @IsOptional()
+  IS_LANDING_PAGE_ENABLED = false;
 
   @ConfigVariablesMetadata({
     group: ConfigVariablesGroup.ADVANCED_SETTINGS,
