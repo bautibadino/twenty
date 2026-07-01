@@ -1,6 +1,12 @@
 // Sincroniza contactos de Whaticket taggeados con medidas de neumatico de camion
 // (rines "y medio": R17.5, R19.5, R22.5, R24.5, etc.) hacia Twenty, como
-// Company (flota) + Person + Opportunity de seguimiento.
+// Person + Opportunity de seguimiento.
+//
+// No crea Company automaticamente: Whaticket casi nunca tiene el nombre de
+// la empresa/flota cargado (solo el nombre de la persona), asi que crear una
+// Company por contacto termina llenando el CRM de tarjetas sueltas sin
+// agrupar nada real. El agrupamiento por flota se hace a mano en Twenty
+// cuando se identifica (arrastrando el Person a una Company existente).
 //
 // No hay webhook de Whaticket para esto -> este script corre por cron
 // (cada 1-2 horas alcanza de sobra para seguimiento de flotas B2B).
@@ -131,10 +137,6 @@ function normalizePhone(rawNumber) {
   return String(rawNumber ?? '').replace(/\D/g, '');
 }
 
-function normalizeName(name) {
-  return String(name ?? '').trim().toLowerCase();
-}
-
 function splitName(fullName) {
   const parts = String(fullName ?? '').trim().split(/\s+/).filter(Boolean);
   const firstName = parts.shift() || 'Contacto Whaticket';
@@ -142,31 +144,8 @@ function splitName(fullName) {
   return { firstName, lastName };
 }
 
-function guessCompanyName(contact) {
-  const extraInfoMatch = (contact.extraInfo ?? []).find((field) =>
-    /empresa|flota|raz.n social|company/i.test(field.name ?? ''),
-  );
-  return extraInfoMatch?.value?.trim() || contact.name?.trim() || contact.number;
-}
-
-async function findOrCreateCompany({ name, companiesByName, created }) {
-  const key = normalizeName(name);
-  const existing = companiesByName.get(key);
-  if (existing) return existing;
-
-  const result = await twentyRequest('/companies', {
-    method: 'POST',
-    body: JSON.stringify({ name }),
-  });
-  const company = result.data.createCompany;
-  companiesByName.set(key, company);
-  created.companies += 1;
-  return company;
-}
-
 async function findOrUpdatePerson({
   contact,
-  company,
   truckTags,
   peopleByPhone,
   created,
@@ -177,17 +156,12 @@ async function findOrUpdatePerson({
   const tagsValue = truckTags.join(', ');
 
   if (existing) {
-    const needsCompanyLink = !existing.companyId && company?.id;
     const needsTagsUpdate = existing[TWENTY_TRUCK_TAGS_FIELD_NAME] !== tagsValue;
 
-    if (needsCompanyLink || needsTagsUpdate) {
-      const patch = {};
-      if (needsCompanyLink) patch.companyId = company.id;
-      if (needsTagsUpdate) patch[TWENTY_TRUCK_TAGS_FIELD_NAME] = tagsValue;
-
+    if (needsTagsUpdate) {
       const result = await twentyRequest(`/people/${existing.id}`, {
         method: 'PATCH',
-        body: JSON.stringify(patch),
+        body: JSON.stringify({ [TWENTY_TRUCK_TAGS_FIELD_NAME]: tagsValue }),
       });
       updated.people += 1;
       return result.data.updatePerson;
@@ -206,7 +180,6 @@ async function findOrUpdatePerson({
         primaryPhoneCountryCode: DEFAULT_PHONE_COUNTRY_CODE,
       },
       ...(contact.email ? { emails: { primaryEmail: contact.email } } : {}),
-      ...(company?.id ? { companyId: company.id } : {}),
       [TWENTY_TRUCK_TAGS_FIELD_NAME]: tagsValue,
     }),
   });
@@ -218,7 +191,6 @@ async function findOrUpdatePerson({
 
 async function ensureOpportunity({
   person,
-  company,
   truckTags,
   opportunitiesByPersonId,
   created,
@@ -230,7 +202,6 @@ async function ensureOpportunity({
     body: JSON.stringify({
       name: `Seguimiento flota - ${truckTags.join(', ')}`,
       pointOfContactId: person.id,
-      ...(company?.id ? { companyId: company.id } : {}),
     }),
   });
   opportunitiesByPersonId.set(person.id, result.data.createOpportunity);
@@ -252,17 +223,12 @@ async function main() {
     `${contacts.length} contactos totales, ${fleetContacts.length} con etiqueta de camion.`,
   );
 
-  console.log('Cargando Companies y People existentes de Twenty...');
-  const [existingCompanies, existingPeople, existingOpportunities] =
-    await Promise.all([
-      fetchAllTwenty('companies'),
-      fetchAllTwenty('people'),
-      fetchAllTwenty('opportunities'),
-    ]);
+  console.log('Cargando People y Opportunities existentes de Twenty...');
+  const [existingPeople, existingOpportunities] = await Promise.all([
+    fetchAllTwenty('people'),
+    fetchAllTwenty('opportunities'),
+  ]);
 
-  const companiesByName = new Map(
-    existingCompanies.map((company) => [normalizeName(company.name), company]),
-  );
   const peopleByPhone = new Map(
     existingPeople
       .filter((person) => person.phones?.primaryPhoneNumber)
@@ -274,20 +240,13 @@ async function main() {
       .map((opportunity) => [opportunity.pointOfContactId, opportunity]),
   );
 
-  const created = { companies: 0, people: 0, opportunities: 0 };
+  const created = { people: 0, opportunities: 0 };
   const updated = { people: 0 };
 
   for (const { contact, truckTags } of fleetContacts) {
     try {
-      const companyName = guessCompanyName(contact);
-      const company = await findOrCreateCompany({
-        name: companyName,
-        companiesByName,
-        created,
-      });
       const person = await findOrUpdatePerson({
         contact,
-        company,
         truckTags,
         peopleByPhone,
         created,
@@ -295,7 +254,6 @@ async function main() {
       });
       await ensureOpportunity({
         person,
-        company,
         truckTags,
         opportunitiesByPersonId,
         created,

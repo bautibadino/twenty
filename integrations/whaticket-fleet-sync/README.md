@@ -18,18 +18,25 @@ logica especifica de un cliente con el codigo compartido de Twenty.
 
 Por cada contacto de Whaticket con etiqueta de camion:
 
-- Busca o crea una **Company** (la flota).
-- Busca (por telefono) o crea una **Person**, vinculada a esa Company, con
-  las medidas detectadas guardadas en un campo custom de texto.
-- Crea una **Opportunity** de seguimiento vinculada a esa Person/Company
-  (una sola vez, no duplica en corridas siguientes).
+- Busca (por telefono) o crea una **Person**, con las medidas detectadas
+  guardadas en un campo custom de texto.
+- Crea una **Opportunity** de seguimiento vinculada a esa Person (una sola
+  vez, no duplica en corridas siguientes).
+
+No crea Company automaticamente: en la primera corrida real (498 contactos)
+se probo crear una Company por contacto (usando el nombre de Whaticket como
+proxy de "flota") y el resultado fue ~487 Companies, casi todas nombres de
+personas sueltas, no flotas reales — mas ruido que valor. El agrupamiento
+por flota se hace a mano en Twenty: cuando identifiques que varios Person
+pertenecen a la misma flota, creás la Company una vez y les asignás el
+`companyId` desde la UI.
 
 ## Setup (una sola vez)
 
 1. **Token de Whaticket**: en `app.whaticket.com` -> Tokens -> crear uno con
    permiso `read:contacts`.
 2. **API Key de Twenty**: en tu Twenty -> Settings -> Developers -> API Keys
-   -> crear una con permisos sobre People, Companies y Opportunities.
+   -> crear una con permisos sobre People y Opportunities.
 3. **Campo custom en Twenty**: Settings -> Data Model -> Person -> agregar
    campo tipo *Text*, label "Truck Tire Sizes" (para que el nombre de API
    generado sea simple). Anota el nombre de API que Twenty le asigna y
@@ -60,9 +67,11 @@ Ejemplo de crontab corriendo cada hora:
 - No sincroniza el contenido de los mensajes/conversacion, solo el contacto
   y sus etiquetas (Whaticket no expone un endpoint de lectura de tickets o
   mensajes en su API publica).
-- El nombre de la Company se infiere del nombre del contacto en Whaticket
-  (o de un campo extra si el agente cargo "empresa"/"flota" ahi). Si el
-  contacto es una persona y no la empresa, vas a tener que corregir el
-  nombre de la Company a mano la primera vez.
+- No agrupa por flota/Company automaticamente (ver arriba). Eso queda como
+  paso manual en Twenty hasta que definamos una fuente confiable del nombre
+  de la empresa (hoy Whaticket no la tiene cargada para casi ningun contacto).
 - El telefono se guarda con codigo de pais fijo (`DEFAULT_PHONE_CALLING_CODE`
   / `DEFAULT_PHONE_COUNTRY_CODE` en `.env`), pensado para Argentina.
+- La API de Twenty rate-limitea a 100 requests/60s; el script ya espacia sus
+  llamadas y reintenta con backoff en 429, pero corridas grandes (cientos de
+  contactos) tardan varios minutos por diseño.
