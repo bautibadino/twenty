@@ -133,8 +133,19 @@ async function fetchAllTwenty(objectNamePlural) {
   return records;
 }
 
+// Twenty guarda primaryPhoneNumber SIN el codigo de pais (lo separa en
+// primaryPhoneCallingCode), pero Whaticket manda el numero completo con
+// codigo de pais incluido (ej. 5493468561511). Si no se despoja ese prefijo
+// antes de comparar, el matching contra Twenty nunca coincide y el script
+// crea un Person nuevo en cada corrida en vez de actualizar el existente.
+const callingCodeDigits = DEFAULT_PHONE_CALLING_CODE.replace(/\D/g, '');
+
 function normalizePhone(rawNumber) {
-  return String(rawNumber ?? '').replace(/\D/g, '');
+  const digits = String(rawNumber ?? '').replace(/\D/g, '');
+  if (callingCodeDigits && digits.startsWith(callingCodeDigits)) {
+    return digits.slice(callingCodeDigits.length);
+  }
+  return digits;
 }
 
 function splitName(fullName) {
