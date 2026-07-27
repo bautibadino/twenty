@@ -1,8 +1,8 @@
-import { Trans } from '@lingui/react';
 import { BaseEmail } from 'src/components/BaseEmail';
 import { CallToAction } from 'src/components/CallToAction';
 import { MainText } from 'src/components/MainText';
 import { Title } from 'src/components/Title';
+import { withAppName } from 'src/utils/branding';
 import { createI18nInstance } from 'src/utils/i18n.utils';
 import { type APP_LOCALES } from 'twenty-shared/translations';
 
@@ -31,9 +31,7 @@ export const SendEmailVerificationLinkEmail = ({
   return (
     <BaseEmail width={333} locale={locale}>
       <Title value={title} />
-      <MainText>
-        <Trans id={bodyId} />
-      </MainText>
+      <MainText>{withAppName(i18n._(bodyId))}</MainText>
       <br />
       <CallToAction href={link} value={ctaLabel} />
       <br />

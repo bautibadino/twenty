@@ -1,0 +1,21 @@
+[mcp_servers.context7]
+args = [
+    "-y",
+    "@upstash/context7-mcp",
+]
+command = "npx"
+
+[mcp_servers.playwright]
+args = [
+    "@playwright/mcp@latest",
+    "--no-sandbox",
+    "--headless",
+]
+command = "npx"
+
+[mcp_servers.postgres]
+args = [
+    "-c",
+    'source packages/twenty-server/.env && npx -y @modelcontextprotocol/server-postgres "$PG_DATABASE_URL"',
+]
+command = "bash"

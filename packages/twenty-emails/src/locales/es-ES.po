@@ -190,6 +190,11 @@ msgstr "Es un CRM, un software para ayudar a las empresas a gestionar eficientem
 
 #. js-lingui-explicit-id
 #: src/components/Footer.tsx
+msgid "Source code"
+msgstr "Código fuente"
+
+#. js-lingui-explicit-id
+#: src/components/Footer.tsx
 msgid "Website"
 msgstr "Sitio web"
 

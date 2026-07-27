@@ -7,7 +7,7 @@ import { msg } from '@lingui/core/macro';
 import { render } from '@react-email/render';
 import { addMilliseconds } from 'date-fns';
 import ms from 'ms';
-import { SendInviteLinkEmail } from 'twenty-emails';
+import { SendInviteLinkEmail, withAppName } from 'twenty-emails';
 import { AppPath, FileFolder } from 'twenty-shared/types';
 import { getAppPath, isDefined } from 'twenty-shared/utils';
 import { IsNull, Repository } from 'typeorm';
@@ -345,10 +345,14 @@ export class WorkspaceInvitationService {
 
         const joinTeamMsg = msg`Join your team on Twenty`;
         const i18n = this.i18nService.getI18nInstance(sender.locale);
-        const subject = i18n._(joinTeamMsg);
+        const subject = withAppName(i18n._(joinTeamMsg));
+
+        // Este `from` se arma a mano y por eso ignora EMAIL_FROM_NAME: el
+        // remitente es la persona que invita, no el producto.
+        const appName = this.twentyConfigService.get('APP_NAME');
 
         await this.emailService.send({
-          from: `${sender.name.firstName} ${sender.name.lastName} (via Twenty) <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
+          from: `${sender.name.firstName} ${sender.name.lastName} (via ${appName}) <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
           to: invitation.value.email,
           subject,
           text,

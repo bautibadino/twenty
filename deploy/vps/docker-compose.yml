@@ -48,6 +48,9 @@ services:
       APP_SECRET: ${APP_SECRET}
       APP_NAME: ${APP_NAME}
       APP_LOGO_URL: ${APP_LOGO_URL}
+      APP_EMAIL_LOGO_URL: ${APP_EMAIL_LOGO_URL}
+      APP_WEBSITE_URL: ${APP_WEBSITE_URL}
+      APP_SOURCE_URL: ${APP_SOURCE_URL}
       STORAGE_TYPE: ${STORAGE_TYPE}
       EMAIL_DRIVER: ${EMAIL_DRIVER}
       EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST}
@@ -98,6 +101,13 @@ services:
       EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD}
       EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
       EMAIL_FROM_NAME: ${EMAIL_FROM_NAME}
+      # El worker también renderiza y manda emails: sin estas variables acá, lo
+      # que salga por cola se iría con el branding de Twenty.
+      APP_NAME: ${APP_NAME}
+      APP_LOGO_URL: ${APP_LOGO_URL}
+      APP_EMAIL_LOGO_URL: ${APP_EMAIL_LOGO_URL}
+      APP_WEBSITE_URL: ${APP_WEBSITE_URL}
+      APP_SOURCE_URL: ${APP_SOURCE_URL}
       DISABLE_DB_MIGRATIONS: "true"
       DISABLE_CRON_JOBS_REGISTRATION: "true"
     volumes:
