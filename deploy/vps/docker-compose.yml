@@ -46,6 +46,8 @@ services:
       REDIS_URL: redis://redis:6379
       DISABLE_DB_MIGRATIONS: "true"
       APP_SECRET: ${APP_SECRET}
+      APP_NAME: ${APP_NAME}
+      APP_LOGO_URL: ${APP_LOGO_URL}
       STORAGE_TYPE: ${STORAGE_TYPE}
       EMAIL_DRIVER: ${EMAIL_DRIVER}
       EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST}
