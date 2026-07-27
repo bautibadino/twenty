@@ -79,13 +79,40 @@ que agregó este directorio.
 
 Dos volúmenes a cuidar: `twenty_twenty-db` (la base) y `twenty_twenty-storage`
 (los archivos). El Auto Backup de Contabo cubre el disco entero del VPS, pero es
-un backup de infraestructura, no un dump lógico. Para uno propio:
+un backup de infraestructura: restaura la máquina completa, y con ella arrastra
+todo lo demás que vive en el VPS al mismo punto en el tiempo.
+
+`backup-twenty.sh` cubre el otro lado: dump lógico diario a `/opt/twenty/backups`,
+retención de 30 días, con verificación del dump. Instalación:
 
 ```bash
-docker exec twenty_db pg_dump -U twenty default > twenty-$(date +%F).sql
-docker run --rm -v twenty_twenty-storage:/data -v $PWD:/out alpine \
-  tar czf /out/twenty-storage-$(date +%F).tar.gz -C /data .
+chmod +x /opt/twenty/src/deploy/vps/backup-twenty.sh
+mkdir -p /opt/twenty/backups
+(crontab -l 2>/dev/null | grep -v backup-twenty; \
+ echo "15 3 * * * /opt/twenty/src/deploy/vps/backup-twenty.sh >> /opt/twenty/backups/backup.log 2>&1") | crontab -
 ```
+
+Los dos son complementarios: el snapshot te salva de perder el disco, el dump te
+deja volver atrás solo el CRM.
+
+### Restaurar
+
+```bash
+# Base completa (borra y recrea el contenido actual)
+docker exec -i twenty_db pg_restore -U twenty -d default --clean --if-exists \
+  < /opt/twenty/backups/twenty-db-<STAMP>.dump
+
+# Solo el schema de un workspace
+docker exec -i twenty_db pg_restore -U twenty -d default --schema=workspace_<id> \
+  < /opt/twenty/backups/twenty-db-<STAMP>.dump
+
+# Archivos
+docker run --rm -v twenty_twenty-storage:/data -v /opt/twenty/backups:/in alpine \
+  tar xzf /in/twenty-storage-<STAMP>.tar.gz -C /data
+```
+
+Después de restaurar archivos, corregir el dueño (el contenedor corre como uid 1000):
+`docker exec -u 0 twenty_server chown -R node:node /app/packages/twenty-server/.local-storage`
 
 ## Historia
 
