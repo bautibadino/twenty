@@ -1,0 +1,100 @@
+name: twenty
+
+services:
+  db:
+    image: postgres:16
+    container_name: twenty_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_DATABASE_USER}
+      POSTGRES_PASSWORD: ${PG_DATABASE_PASSWORD}
+      POSTGRES_DB: ${PG_DATABASE_NAME}
+    volumes:
+      - twenty-db:/var/lib/postgresql/data
+    networks: [twenty_internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_DATABASE_USER} -d ${PG_DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: twenty_redis
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    networks: [twenty_internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  server:
+    image: twenty-fork:latest
+    container_name: twenty_server
+    restart: unless-stopped
+    environment:
+      NODE_PORT: 3000
+      PG_DATABASE_URL: postgres://${PG_DATABASE_USER}:${PG_DATABASE_PASSWORD}@db:5432/${PG_DATABASE_NAME}
+      SERVER_URL: ${SERVER_URL}
+      FRONT_AUTO_BASE_URL: ${FRONT_AUTO_BASE_URL}
+      IS_MULTIWORKSPACE_ENABLED: ${IS_MULTIWORKSPACE_ENABLED}
+      IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS: ${IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS}
+      DEFAULT_SUBDOMAIN: ${DEFAULT_SUBDOMAIN}
+      MAX_WORKSPACES_LIMIT: ${MAX_WORKSPACES_LIMIT}
+      REDIS_URL: redis://redis:6379
+      DISABLE_DB_MIGRATIONS: "true"
+      APP_SECRET: ${APP_SECRET}
+      STORAGE_TYPE: ${STORAGE_TYPE}
+    volumes:
+      - twenty-storage:/app/packages/twenty-server/.local-storage
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    networks: [twenty_internal, wcp_edge]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:3000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=wcp_edge"
+      - "traefik.http.routers.twenty.rule=HostRegexp(`^.+\\.pymeinteligente\\.online$`)"
+      - "traefik.http.routers.twenty.entrypoints=websecure"
+      - "traefik.http.routers.twenty.tls=true"
+      - "traefik.http.services.twenty.loadbalancer.server.port=3000"
+
+  worker:
+    image: twenty-fork:latest
+    container_name: twenty_worker
+    restart: unless-stopped
+    command: ["yarn", "worker:prod"]
+    environment:
+      PG_DATABASE_URL: postgres://${PG_DATABASE_USER}:${PG_DATABASE_PASSWORD}@db:5432/${PG_DATABASE_NAME}
+      SERVER_URL: ${SERVER_URL}
+      FRONT_AUTO_BASE_URL: ${FRONT_AUTO_BASE_URL}
+      IS_MULTIWORKSPACE_ENABLED: ${IS_MULTIWORKSPACE_ENABLED}
+      IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS: ${IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS}
+      DEFAULT_SUBDOMAIN: ${DEFAULT_SUBDOMAIN}
+      MAX_WORKSPACES_LIMIT: ${MAX_WORKSPACES_LIMIT}
+      REDIS_URL: redis://redis:6379
+      APP_SECRET: ${APP_SECRET}
+      STORAGE_TYPE: ${STORAGE_TYPE}
+      DISABLE_DB_MIGRATIONS: "true"
+      DISABLE_CRON_JOBS_REGISTRATION: "true"
+    volumes:
+      - twenty-storage:/app/packages/twenty-server/.local-storage
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [twenty_internal]
+
+volumes:
+  twenty-db:
+  twenty-storage:
+
+networks:
+  twenty_internal:
+  wcp_edge:
+    external: true
