@@ -1,0 +1,43 @@
+name: Fork CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: fork-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.repository == 'bautibadino/twenty'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          # lint:diff-with-main diffs against origin/main.
+          fetch-depth: 0
+
+      - name: Install dependencies
+        uses: ./.github/actions/yarn-install
+
+      - name: Build twenty-shared
+        run: npx nx build twenty-shared
+
+      - name: Typecheck front
+        run: npx nx typecheck twenty-front
+
+      - name: Typecheck server
+        run: npx nx typecheck twenty-server
+
+      - name: Lint front (diff with main)
+        run: npx nx lint:diff-with-main twenty-front
+
+      - name: Lint server (diff with main)
+        run: npx nx lint:diff-with-main twenty-server

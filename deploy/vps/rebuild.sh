@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Rebuild de la imagen + restart.
+# Fallback MANUAL: build en el server + restart. El camino normal es el
+# workflow fork-upstream-sync (build en GitHub Actions + deploy.sh).
+#
+# OJO: esto no corre las migraciones. Si el cambio trae comandos de upgrade,
+# correrlos antes de levantar la imagen nueva (ver README, sección Operación).
 #
 # Solo hace falta cuando cambia CÓDIGO. Para cambios de .env o del compose
 # alcanza con `docker compose up -d server worker`, que tarda segundos.
