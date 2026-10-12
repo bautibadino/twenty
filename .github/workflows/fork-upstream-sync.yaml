@@ -363,7 +363,10 @@ jobs:
 
   deploy:
     needs: build
+    # always(): build's own needs are skipped on push, and that skip would
+    # otherwise propagate here even though build succeeded.
     if: >-
+      always() &&
       github.repository == 'bautibadino/twenty' &&
       github.ref == 'refs/heads/main' &&
       needs.build.result == 'success'
