@@ -29,6 +29,13 @@ build, install) left by that merge. The working tree is the merge state.
 - `MAX_WORKSPACES_LIMIT` in sign-in-up and workspace creation.
 - The landing page (`pages/landing/*`, `IndexPageRouter`).
 - `deploy/**`, `integrations/**`, `docs/SAAS_DEPLOYMENT.md`.
+- The `run-skipped-instance-commands` CLI command
+  (`packages/twenty-server/src/database/commands/run-skipped-instance-commands.command.ts`,
+  its selection util `select-skipped-instance-steps.util.ts`, the
+  `RunSkippedInstanceCommandsCommand` registration in
+  `database-command.module.ts`, and `resolveStartCursor` staying public in
+  `upgrade-sequence-runner.service.ts`). `deploy/oracle/deploy.sh` calls it
+  before `upgrade`.
 - Our `.github/workflows/`. Never restore upstream workflows; they are removed on
   purpose.
 - Our Dockerfile delta: no `VOLUME` line.

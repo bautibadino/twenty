@@ -13,6 +13,7 @@ import { ListOrphanedWorkspaceEntitiesCommand } from 'src/database/commands/list
 import { ConfirmationQuestion } from 'src/database/commands/questions/confirmation.question';
 import { RebuildApplicationDefaultDepsCommand } from 'src/database/commands/rebuild-application-default-deps.command';
 import { RunInstanceCommandsCommand } from 'src/database/commands/run-instance-commands.command';
+import { RunSkippedInstanceCommandsCommand } from 'src/database/commands/run-skipped-instance-commands.command';
 import { UpgradeVersionCommandModule } from 'src/database/commands/upgrade-version-command/upgrade-version-command.module';
 import { WorkspaceExportModule } from 'src/database/commands/workspace-export/workspace-export.module';
 import { TypeORMModule } from 'src/database/typeorm/typeorm.module';
@@ -120,6 +121,7 @@ import { WorkflowCoreConsistencyModule } from 'src/modules/workflow/workflow-cor
     GenerateInstanceCommandCommand,
     InstanceCommandGenerationService,
     RunInstanceCommandsCommand,
+    RunSkippedInstanceCommandsCommand,
     ListOrphanedWorkspaceEntitiesCommand,
     EnterpriseKeyValidationCronCommand,
     RotateSigningKeysCronCommand,

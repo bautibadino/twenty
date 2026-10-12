@@ -246,7 +246,7 @@ export class UpgradeSequenceRunnerService {
     return { totalSuccesses, totalFailures };
   }
 
-  private async resolveStartCursor({
+  async resolveStartCursor({
     sequence,
     allProvisionedWorkspaceIds,
   }: {

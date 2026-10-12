@@ -110,8 +110,11 @@ Los nombres propios de este server están en un bloque de variables al principio
    actual y aborta sin haber cambiado nada.
 5. Deja la imagen en uso como `twenty-fork:arm64-previous` y etiqueta la nueva
    como `twenty-fork:arm64`.
-6. Corre el upgrade con la imagen **nueva** (`cache:flush`, `upgrade`,
-   `cache:flush`). Si falla, restaura el tag anterior y levanta la versión
+6. Corre el upgrade con la imagen **nueva** (`cache:flush`,
+   `run-skipped-instance-commands`, `upgrade`, `cache:flush`).
+   `run-skipped-instance-commands` aplica los comandos de instancia que upstream
+   agregó a una versión ya publicada después de que la base la superó (como los
+   dos de 2.18.0), porque `upgrade` los saltea. Si falla, restaura el tag anterior y levanta la versión
    vieja. **No restaura la base**: puede haber quedado parcialmente migrada.
 7. `docker compose up -d server worker` y espera hasta 5 minutos a que
    `twenty_server_oracle` esté `healthy`, y además a que

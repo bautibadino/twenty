@@ -176,6 +176,15 @@ run_database_upgrade() {
   "${run_upgrade[@]}" cache:flush < /dev/null \
     || log "warning: cache:flush before upgrade failed, continuing (same as entrypoint.sh)"
 
+  # `upgrade` resumes from the segment of the last attempted step, so instance
+  # commands that upstream added to an already-released version after this
+  # database moved past it (2.18.0 in production) would be skipped and later
+  # workspace commands would fail on the missing schema. This applies exactly
+  # those, never workspace commands. Fatal, like a failed upgrade.
+  if ! "${run_upgrade[@]}" run-skipped-instance-commands < /dev/null; then
+    return 1
+  fi
+
   local upgrade_log
   upgrade_log=$(mktemp)
   if ! "${run_upgrade[@]}" upgrade < /dev/null 2>&1 | tee "$upgrade_log"; then
