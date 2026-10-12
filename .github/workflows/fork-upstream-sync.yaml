@@ -1,7 +1,7 @@
 name: Fork upstream sync
 
 # Keeps the fork merged with upstream Twenty release tags and deploys main to
-# the VPS. Flow: detect -> merge -> build -> deploy. A push to main (our own
+# the Oracle VM (ARM64). Flow: detect -> merge -> build -> deploy. A push to main (our own
 # merged PRs) skips detect/merge and goes straight to build -> deploy.
 #
 # Pushes made with GITHUB_TOKEN do not trigger workflows, so the merge commit
@@ -307,7 +307,9 @@ jobs:
         needs.detect.outputs.needs_deploy == 'true' ||
         needs.merge.result == 'success'
       )
-    runs-on: ubuntu-latest
+    # Native ARM runner: production is aarch64, and QEMU emulation of this build
+    # would take hours.
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
     permissions:
       contents: read
@@ -349,6 +351,7 @@ jobs:
           context: .
           file: packages/twenty-docker/twenty/Dockerfile
           target: twenty
+          platforms: linux/arm64
           push: true
           build-args: |
             APP_VERSION=${{ steps.meta.outputs.app_version }}
@@ -380,16 +383,16 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ needs.build.outputs.sha }}
-          sparse-checkout: deploy/vps
+          sparse-checkout: deploy/oracle
 
       - name: Configure SSH
         env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
-          for name in VPS_HOST VPS_USER VPS_SSH_KEY VPS_KNOWN_HOSTS; do
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
             if [ -z "${!name}" ]; then
               echo "::error::secret ${name} is empty"
               exit 1
@@ -398,13 +401,13 @@ jobs:
           # Fail closed: the host key must be pinned, never trusted on first use.
           umask 077
           mkdir -p ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
 
       - name: Copy compose file and run deploy script
         env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           ssh_opts=(
             -i "$HOME/.ssh/deploy_key"
@@ -419,26 +422,26 @@ jobs:
 
           # The package is private: lend the server this job's short-lived
           # token for the pull. It expires when the job ends.
-          printf '%s' "$GH_TOKEN" | ssh "${ssh_opts[@]}" "${VPS_USER}@${VPS_HOST}" \
+          printf '%s' "$GH_TOKEN" | ssh "${ssh_opts[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "docker login ghcr.io -u '${GITHUB_ACTOR}' --password-stdin" > /dev/null
 
-          scp "${ssh_opts[@]}" deploy/vps/docker-compose.yml \
-            "${VPS_USER}@${VPS_HOST}:/opt/twenty/docker-compose.yml"
+          scp "${ssh_opts[@]}" deploy/oracle/docker-compose.yml \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:/opt/twenty/docker-compose.oracle.yml"
 
           # The script is streamed over stdin so the server needs no checkout.
-          ssh "${ssh_opts[@]}" "${VPS_USER}@${VPS_HOST}" "bash -s -- '${image_ref}'" \
-            < deploy/vps/deploy.sh 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          ssh "${ssh_opts[@]}" "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -s -- '${image_ref}'" \
+            < deploy/oracle/deploy.sh 2>&1 | tee "$RUNNER_TEMP/deploy.log"
 
       - name: Remove registry credentials from the server
         if: always()
         env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
           [ -f "$HOME/.ssh/deploy_key" ] || exit 0
           ssh -i "$HOME/.ssh/deploy_key" -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
-            -o ConnectTimeout=20 "${VPS_USER}@${VPS_HOST}" "docker logout ghcr.io" || true
+            -o ConnectTimeout=20 "${DEPLOY_USER}@${DEPLOY_HOST}" "docker logout ghcr.io" || true
 
       - name: Health check
         run: |
@@ -459,7 +462,7 @@ jobs:
           title="Deploy ${SHA:0:12} failed"
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           {
-            echo "Deploy of \`${IMAGE}:${SHA}\` failed. The server may have been rolled back to the previous image; the database may be partially upgraded. The pre-deploy dump path is in the log tail below (see deploy/vps/README.md to restore)."
+            echo "Deploy of \`${IMAGE}:${SHA}\` failed. The server may have been rolled back to the previous image; the database may be partially upgraded. The pre-deploy dump path is in the log tail below (see deploy/oracle/README.md to restore)."
             echo
             echo "- Run: ${run_url}"
             if [ -f "$RUNNER_TEMP/deploy.log" ]; then

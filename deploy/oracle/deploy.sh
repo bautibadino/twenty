@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Deploys a prebuilt Twenty image on the VPS. Runs ON the server as the deploy
-# user. CI streams it over SSH, so the server needs no git checkout:
-#   ssh user@host 'bash -s -- <image-ref>' < deploy/vps/deploy.sh
+# Deploys a prebuilt Twenty image on the Oracle VM (ARM64). Runs ON the server as
+# the deploy user. CI streams it over SSH, so the server needs no git checkout:
+#   ssh user@host 'bash -s -- <image-ref>' < deploy/oracle/deploy.sh
 #
 # Usage: deploy.sh <image-ref>   e.g. ghcr.io/bautibadino/twenty-fork:<sha>
 #
@@ -12,12 +12,19 @@
 # here is the only way back, and restoring is a human decision.
 set -euo pipefail
 
+# Server-specific names. Everything else in the script is generic.
 STACK_DIR=/opt/twenty
-COMPOSE_FILE="$STACK_DIR/docker-compose.yml"
+COMPOSE_FILE="$STACK_DIR/docker-compose.oracle.yml"
 ENV_FILE="$STACK_DIR/.env"
+DB_CONTAINER=twenty_db_oracle
+SERVER_CONTAINER=twenty_server_oracle
+LOCAL_IMAGE=twenty-fork
+CURRENT_TAG=arm64
+PREVIOUS_TAG=arm64-previous
+HOST_HEALTH_URL=http://127.0.0.1:3000/healthz
+
 BACKUP_DIR="$STACK_DIR/backups"
 LOG_FILE="$STACK_DIR/deploy.log"
-LOCAL_IMAGE=twenty-fork
 MIN_FREE_KB=$((8 * 1024 * 1024))
 HEALTH_TIMEOUT_SECONDS=300
 DUMP_RETENTION_DAYS=14
@@ -43,7 +50,7 @@ compose() {
 warn_database_state() {
   log "WARNING: the database may be partially or fully upgraded."
   log "Pre-deploy dump (the only way back after a schema upgrade): ${BACKUP_FILE}"
-  log "Restore steps: deploy/vps/README.md, section 'Restaurar el dump pre-deploy'."
+  log "Restore steps: deploy/oracle/README.md, section 'Restaurar el dump pre-deploy'."
 }
 
 restore_previous_image() {
@@ -51,8 +58,8 @@ restore_previous_image() {
     log "no previous image was running before this deploy; nothing to roll back to"
     return 1
   fi
-  docker tag "$PREVIOUS_IMAGE_ID" "${LOCAL_IMAGE}:latest" < /dev/null
-  log "tag ${LOCAL_IMAGE}:latest restored to the previous image"
+  docker tag "$PREVIOUS_IMAGE_ID" "${LOCAL_IMAGE}:${CURRENT_TAG}" < /dev/null
+  log "tag ${LOCAL_IMAGE}:${CURRENT_TAG} restored to the previous image"
 }
 
 check_preconditions() {
@@ -70,8 +77,8 @@ check_preconditions() {
     die "only $((free_kb / 1024 / 1024)) GB free on ${STACK_DIR}; need at least 8 GB for the image pull and the dump"
   fi
 
-  [ "$(docker inspect -f '{{.State.Running}}' twenty_db 2> /dev/null < /dev/null)" = "true" ] \
-    || die "container twenty_db is not running; refusing to deploy without a database to back up"
+  [ "$(docker inspect -f '{{.State.Running}}' "$DB_CONTAINER" 2> /dev/null < /dev/null)" = "true" ] \
+    || die "container ${DB_CONTAINER} is not running; refusing to deploy without a database to back up"
   log "preconditions ok (free: $((free_kb / 1024 / 1024)) GB)"
 }
 
@@ -101,7 +108,7 @@ backup_database() {
   stamp=$(date +%Y%m%d-%H%M%S)
   BACKUP_FILE="$BACKUP_DIR/predeploy-${stamp}.dump"
 
-  if ! docker exec twenty_db pg_dump -U "$pg_user" -d "$pg_db" -Fc < /dev/null > "$BACKUP_FILE"; then
+  if ! docker exec "$DB_CONTAINER" pg_dump -U "$pg_user" -d "$pg_db" -Fc < /dev/null > "$BACKUP_FILE"; then
     rm -f "$BACKUP_FILE"
     log "ERROR: pg_dump failed"
     return 1
@@ -112,7 +119,7 @@ backup_database() {
     return 1
   fi
   # A corrupt dump looks identical to a good one until the day it is needed.
-  if ! docker exec -i twenty_db pg_restore --list < "$BACKUP_FILE" > /dev/null; then
+  if ! docker exec -i "$DB_CONTAINER" pg_restore --list < "$BACKUP_FILE" > /dev/null; then
     log "ERROR: dump failed pg_restore --list verification: $BACKUP_FILE"
     return 1
   fi
@@ -123,7 +130,7 @@ pull_image() {
   local image_ref=$1
   log "pull ${image_ref}"
 
-  PREVIOUS_IMAGE_ID=$(docker image inspect -f '{{.Id}}' "${LOCAL_IMAGE}:latest" 2> /dev/null < /dev/null || true)
+  PREVIOUS_IMAGE_ID=$(docker image inspect -f '{{.Id}}' "${LOCAL_IMAGE}:${CURRENT_TAG}" 2> /dev/null < /dev/null || true)
 
   docker pull "$image_ref" < /dev/null
 }
@@ -133,14 +140,14 @@ tag_image() {
   local new_image_id
   new_image_id=$(docker image inspect -f '{{.Id}}' "$image_ref" < /dev/null)
 
-  # Skip when redeploying the same image, otherwise :previous would point at
+  # Skip when redeploying the same image, otherwise :${PREVIOUS_TAG} would point at
   # the build we are trying to leave.
   if [ -n "$PREVIOUS_IMAGE_ID" ] && [ "$PREVIOUS_IMAGE_ID" != "$new_image_id" ]; then
-    docker tag "$PREVIOUS_IMAGE_ID" "${LOCAL_IMAGE}:previous" < /dev/null
-    log "kept running image as ${LOCAL_IMAGE}:previous"
+    docker tag "$PREVIOUS_IMAGE_ID" "${LOCAL_IMAGE}:${PREVIOUS_TAG}" < /dev/null
+    log "kept running image as ${LOCAL_IMAGE}:${PREVIOUS_TAG}"
   fi
-  docker tag "$image_ref" "${LOCAL_IMAGE}:latest" < /dev/null
-  log "tagged ${LOCAL_IMAGE}:latest -> ${new_image_id}"
+  docker tag "$image_ref" "${LOCAL_IMAGE}:${CURRENT_TAG}" < /dev/null
+  log "tagged ${LOCAL_IMAGE}:${CURRENT_TAG} -> ${new_image_id}"
 }
 
 run_database_upgrade() {
@@ -160,12 +167,9 @@ run_database_upgrade() {
   # failure to a warning; here it must be fatal.
   # DISABLE_CRON_JOBS_REGISTRATION: the entrypoint would otherwise register crons
   # for this one-off container.
-  # traefik.enable=false: the one-off container inherits the service labels, and
-  # Traefik would otherwise route live traffic to a container serving nothing.
   local run_upgrade=(
     docker compose -f "$COMPOSE_FILE" --project-directory "$STACK_DIR"
-    run --rm --no-deps -T -e DISABLE_CRON_JOBS_REGISTRATION=true
-    --label traefik.enable=false server
+    run --rm --no-deps -T -e DISABLE_CRON_JOBS_REGISTRATION=true server
     node dist/command/command
   )
 
@@ -193,9 +197,20 @@ wait_until_healthy() {
   local deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))
   local status=""
   while [ "$SECONDS" -lt "$deadline" ]; do
-    status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' twenty_server 2> /dev/null < /dev/null || echo missing)
+    status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$SERVER_CONTAINER" 2> /dev/null < /dev/null || echo missing)
     if [ "$status" = "healthy" ]; then
-      return 0
+      # The reverse tunnel forwards exactly this host port, so the container
+      # healthcheck alone does not prove that traffic can arrive.
+      local attempt
+      for attempt in 1 2 3 4 5 6; do
+        if curl -fsS --max-time 10 "$HOST_HEALTH_URL" < /dev/null > /dev/null; then
+          log "host health check ok: ${HOST_HEALTH_URL}"
+          return 0
+        fi
+        sleep 5
+      done
+      log "container is healthy but ${HOST_HEALTH_URL} does not answer from the host"
+      return 1
     fi
     sleep 5
   done
@@ -205,15 +220,15 @@ wait_until_healthy() {
 
 cleanup() {
   log "cleanup"
-  local latest_id previous_id ref ref_id
-  latest_id=$(docker image inspect -f '{{.Id}}' "${LOCAL_IMAGE}:latest" < /dev/null)
-  previous_id=$(docker image inspect -f '{{.Id}}' "${LOCAL_IMAGE}:previous" 2> /dev/null < /dev/null || true)
+  local current_id previous_id ref ref_id
+  current_id=$(docker image inspect -f '{{.Id}}' "${LOCAL_IMAGE}:${CURRENT_TAG}" < /dev/null)
+  previous_id=$(docker image inspect -f '{{.Id}}' "${LOCAL_IMAGE}:${PREVIOUS_TAG}" 2> /dev/null < /dev/null || true)
 
   # Registry-tagged copies pile up one per deploy; keep only the current and
   # the previous image.
   while IFS= read -r ref; do
     ref_id=$(docker image inspect -f '{{.Id}}' "$ref" < /dev/null)
-    if [ "$ref_id" != "$latest_id" ] && [ "$ref_id" != "$previous_id" ]; then
+    if [ "$ref_id" != "$current_id" ] && [ "$ref_id" != "$previous_id" ]; then
       docker rmi "$ref" < /dev/null > /dev/null || true
     fi
   done < <(docker image ls --format '{{.Repository}}:{{.Tag}}' < /dev/null | grep -E '^ghcr\.io/.+/twenty-fork:' || true)
@@ -261,7 +276,7 @@ main() {
   log "starting server and worker"
   compose up -d server worker
   if ! wait_until_healthy; then
-    log "ERROR: twenty_server did not become healthy within ${HEALTH_TIMEOUT_SECONDS}s; rolling back the image"
+    log "ERROR: ${SERVER_CONTAINER} did not become healthy within ${HEALTH_TIMEOUT_SECONDS}s; rolling back the image"
     if restore_previous_image; then
       compose up -d --force-recreate server worker || log "ERROR: could not restart with the previous image"
     fi

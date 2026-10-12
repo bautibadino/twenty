@@ -1,0 +1,136 @@
+name: twenty-oracle
+
+# Compose de PRODUCCION del CRM en la VM Oracle (ARM64, Ubuntu 22.04).
+# En el server vive como /opt/twenty/docker-compose.oracle.yml y se invoca
+# siempre desde /opt/twenty:
+#   docker compose -f docker-compose.oracle.yml ...
+# Notas:
+#   - Toda la configuracion sale de /opt/twenty/.env (interpolacion de ${VARS});
+#     no hay env_file. Una variable que no figura bajo `environment:` no llega
+#     al contenedor.
+#   - Los nombres de volumen/red/contenedor son los que ya tienen los datos de
+#     produccion: NO renombrar (un volumen nuevo arranca vacio).
+#   - Sin Traefik en esta VM: el server solo escucha en 127.0.0.1:3000 y el
+#     trafico publico llega por un tunel SSH inverso desde Contabo.
+#   - Server y worker usan la imagen local twenty-fork:arm64, que deploy.sh
+#     etiqueta a partir de la imagen de GHCR.
+
+services:
+  db:
+    image: postgres:16
+    container_name: twenty_db_oracle
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_DATABASE_USER}
+      POSTGRES_PASSWORD: ${PG_DATABASE_PASSWORD}
+      POSTGRES_DB: ${PG_DATABASE_NAME}
+    volumes:
+      - twenty-db-oracle:/var/lib/postgresql/data
+    networks: [twenty_internal_oracle]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_DATABASE_USER} -d ${PG_DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: twenty_redis_oracle
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    networks: [twenty_internal_oracle]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  server:
+    image: twenty-fork:arm64
+    container_name: twenty_server_oracle
+    restart: unless-stopped
+    environment:
+      NODE_PORT: 3000
+      PG_DATABASE_URL: postgres://${PG_DATABASE_USER}:${PG_DATABASE_PASSWORD}@db:5432/${PG_DATABASE_NAME}
+      SERVER_URL: ${SERVER_URL}
+      IS_MULTIWORKSPACE_ENABLED: ${IS_MULTIWORKSPACE_ENABLED}
+      IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS: ${IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS}
+      DEFAULT_SUBDOMAIN: ${DEFAULT_SUBDOMAIN}
+      MAX_WORKSPACES_LIMIT: ${MAX_WORKSPACES_LIMIT}
+      REDIS_URL: redis://redis:6379
+      # deploy.sh runs the upgrade explicitly; a plain restart must never migrate.
+      DISABLE_DB_MIGRATIONS: "true"
+      APP_SECRET: ${APP_SECRET}
+      APP_NAME: ${APP_NAME}
+      APP_LOGO_URL: ${APP_LOGO_URL}
+      APP_EMAIL_LOGO_URL: ${APP_EMAIL_LOGO_URL}
+      APP_WEBSITE_URL: ${APP_WEBSITE_URL}
+      APP_SOURCE_URL: ${APP_SOURCE_URL}
+      STORAGE_TYPE: ${STORAGE_TYPE}
+      EMAIL_DRIVER: ${EMAIL_DRIVER}
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST}
+      EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT}
+      EMAIL_SMTP_USER: ${EMAIL_SMTP_USER}
+      EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME}
+    # Loopback only: the reverse SSH tunnel (twenty-tunnel.service) forwards
+    # exactly this port to Traefik on the Contabo VPS.
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - twenty-storage-oracle:/app/packages/twenty-server/.local-storage
+    depends_on:
+      db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    networks: [twenty_internal_oracle]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:3000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    image: twenty-fork:arm64
+    container_name: twenty_worker_oracle
+    restart: unless-stopped
+    command: ["yarn", "worker:prod"]
+    environment:
+      PG_DATABASE_URL: postgres://${PG_DATABASE_USER}:${PG_DATABASE_PASSWORD}@db:5432/${PG_DATABASE_NAME}
+      SERVER_URL: ${SERVER_URL}
+      IS_MULTIWORKSPACE_ENABLED: ${IS_MULTIWORKSPACE_ENABLED}
+      IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS: ${IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS}
+      DEFAULT_SUBDOMAIN: ${DEFAULT_SUBDOMAIN}
+      MAX_WORKSPACES_LIMIT: ${MAX_WORKSPACES_LIMIT}
+      REDIS_URL: redis://redis:6379
+      APP_SECRET: ${APP_SECRET}
+      STORAGE_TYPE: ${STORAGE_TYPE}
+      EMAIL_DRIVER: ${EMAIL_DRIVER}
+      EMAIL_SMTP_HOST: ${EMAIL_SMTP_HOST}
+      EMAIL_SMTP_PORT: ${EMAIL_SMTP_PORT}
+      EMAIL_SMTP_USER: ${EMAIL_SMTP_USER}
+      EMAIL_SMTP_PASSWORD: ${EMAIL_SMTP_PASSWORD}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME}
+      # The worker also renders and sends emails: without these, anything sent
+      # through the queue would go out with the upstream Twenty branding.
+      APP_NAME: ${APP_NAME}
+      APP_LOGO_URL: ${APP_LOGO_URL}
+      APP_EMAIL_LOGO_URL: ${APP_EMAIL_LOGO_URL}
+      APP_WEBSITE_URL: ${APP_WEBSITE_URL}
+      APP_SOURCE_URL: ${APP_SOURCE_URL}
+      DISABLE_DB_MIGRATIONS: "true"
+      DISABLE_CRON_JOBS_REGISTRATION: "true"
+    volumes:
+      - twenty-storage-oracle:/app/packages/twenty-server/.local-storage
+    depends_on:
+      db: {condition: service_healthy}
+      server: {condition: service_healthy}
+    networks: [twenty_internal_oracle]
+
+volumes:
+  twenty-db-oracle:
+  twenty-storage-oracle:
+
+networks:
+  twenty_internal_oracle:

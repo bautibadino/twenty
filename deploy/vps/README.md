@@ -1,6 +1,14 @@
-# Deploy de Twenty en el VPS
+# Deploy de Twenty en el VPS (Contabo) — stack detenido, referencia de rollback
 
-Configuración de producción del CRM. Vive en el VPS en `/opt/twenty` — este
+> **Aviso:** producción se mudó a una VM Oracle ARM64 el 2026-08-30. El stack de
+> Contabo descrito acá está **detenido** desde entonces y se conserva solo como
+> referencia de rollback. El deploy automatizado, los backups vigentes y el
+> runbook actual están en [`deploy/oracle/README.md`](../oracle/README.md).
+> El resto de este documento es histórico y describe ese stack tal como quedó en
+> el servidor de Contabo. Su cron de backup diario genera dumps vacíos desde la
+> mudanza (la base está detenida): no sirven como backup.
+
+Configuración que tuvo el CRM en producción. Vive en el VPS en `/opt/twenty` — este
 directorio es la copia versionada de esos archivos, para no depender del disco
 del server.
 
@@ -18,7 +26,7 @@ la red externa `wcp_edge`.
   subdominio, y el challenge es HTTP-01 por host: sin wildcard, el workspace
   levanta pero se queda sin certificado.
 - Imagen `ghcr.io/bautibadino/twenty-fork` (privada), construida por GitHub
-  Actions. El job de deploy le presta al server su token temporal para el pull. En el server solo se hace `docker pull`; ver "Deploy automatizado".
+  Actions. El job de deploy le presta al server su token temporal para el pull.
 - Usuario de deploy en el server, miembro del grupo `docker`, con escritura en
   `/opt/twenty`.
 
@@ -43,118 +51,17 @@ docker compose run --rm server node dist/command/command upgrade
 docker compose up -d
 ```
 
-## Deploy automatizado
-
-El workflow `.github/workflows/fork-upstream-sync.yaml` mantiene el fork al día
-con los releases de upstream (`twentyhq/twenty`, tags `twenty/vX.Y.Z`) y despliega
-sin intervención:
-
-1. **detect** (diario, 07:00 hora Argentina): busca el último tag estable de
-   upstream. Si ya está en `main`, termina en segundos.
-2. **merge**: mergea el tag con `deploy/automation/sync-upstream.sh`. Si hay
-   conflictos o falla la verificación (build y typecheck), corre un agente de
-   Claude con las reglas de `deploy/automation/merge-policy.md` y vuelve a
-   verificar. Si sigue fallando, no se mergea ni se despliega nada: se abre el
-   issue `Upstream sync <tag> needs attention` y el trabajo queda en la rama
-   `sync/upstream-<versión>`.
-3. **build**: construye la imagen en GitHub Actions y la publica en
-   `ghcr.io/bautibadino/twenty-fork` con los tags `<sha>` y `latest`.
-4. **deploy**: copia el compose al server y ejecuta `deploy/vps/deploy.sh` por
-   SSH (sin checkout en el server). Después consulta el healthcheck público.
-   Si falla, abre el issue `Deploy <sha> failed`.
-
-Los PR propios que se mergean a `main` también pasan por build + deploy (sin
-detect ni merge). El workflow `fork-ci.yaml` corre un chequeo liviano en cada PR.
-
-El fork **no** lleva los workflows de upstream: `.github/workflows/` contiene solo
-archivos propios, y en cada merge se conserva nuestro lado.
-
-### Secrets y variables del repo
-
-| Nombre | Tipo | Uso |
-|---|---|---|
-| `CLAUDE_CODE_OAUTH_TOKEN` | secret | Agente que resuelve conflictos |
-| `VPS_HOST` | secret | Host o IP del VPS |
-| `VPS_USER` | secret | Usuario de deploy |
-| `VPS_SSH_KEY` | secret | Clave privada ed25519 del usuario de deploy |
-| `VPS_KNOWN_HOSTS` | secret | Línea de host key fijada (`ssh-keyscan -t ed25519 <host>`). Si está vacío el deploy falla: nunca se desactiva la verificación de host |
-| `DEPLOY_HEALTHCHECK_URL` | variable | Opcional. Por defecto `https://app.pymeinteligente.online/healthz` |
-
-### Qué hace `deploy.sh`
-
-Corre en el server como el usuario de deploy y deja el log en
-`/opt/twenty/deploy.log`:
-
-1. Verifica docker, `docker-compose.yml`, `.env` y al menos 8 GB libres.
-2. `docker pull` de la imagen nueva, todavía sin cortar el servicio.
-3. **Detiene `server` y `worker`.** Desde acá hasta el paso 7 el CRM está caído:
-   el código viejo no puede escribir mientras se toma el dump ni mientras se
-   migra el schema, porque lo escrito después del dump se perdería al restaurar.
-4. **Dump previo** `pg_dump -Fc` a `/opt/twenty/backups/predeploy-<fecha>.dump`,
-   verificado con `pg_restore --list`. Si falla, vuelve a levantar la versión
-   actual y aborta sin haber cambiado nada.
-5. Deja la imagen en uso como `twenty-fork:previous` y etiqueta la nueva como
-   `twenty-fork:latest`.
-6. Corre el upgrade con la imagen **nueva** (`cache:flush`, `upgrade`,
-   `cache:flush`). Si falla, restaura el tag anterior y levanta la versión
-   vieja. **No restaura la base**: puede haber quedado parcialmente migrada.
-7. `docker compose up -d server worker` y espera hasta 5 minutos a que
-   `twenty_server` esté `healthy`. Si no llega, vuelve a la imagen anterior.
-8. Limpia imágenes viejas y dumps `predeploy-*` de más de 14 días.
-
-### Ejecutar a mano
-
-En GitHub: Actions > "Fork upstream sync" > Run workflow. Parámetros:
-
-- `upstream_tag`: tag a mergear (por ejemplo `twenty/v2.46.0`). Vacío = el último.
-- `deploy_only`: no mergea; reconstruye y despliega el `main` actual.
-
-O con la CLI: `gh workflow run fork-upstream-sync.yaml -f deploy_only=true`.
-
-### Volver atrás a mano
-
-Solo la imagen (el schema no cambió, o la versión anterior lo tolera):
-
-```bash
-cd /opt/twenty
-docker tag twenty-fork:previous twenty-fork:latest
-docker compose up -d --force-recreate server worker
-```
-
-Si el deploy corrió migraciones de schema, volver a la imagen anterior **no**
-alcanza: hay que restaurar también el dump pre-deploy.
-
-### Restaurar el dump pre-deploy
-
-Es la única vía de vuelta después de un upgrade de schema. Se pierden los datos
-escritos desde que se tomó el dump.
-
-```bash
-cd /opt/twenty
-ls -lt backups/predeploy-*.dump | head -3          # elegir el dump
-docker compose stop server worker
-docker exec -i twenty_db pg_restore -U twenty -d default --clean --if-exists \
-  < backups/predeploy-<STAMP>.dump
-docker tag twenty-fork:previous twenty-fork:latest
-docker compose up -d server worker
-```
-
-(`twenty` y `default` son los valores de `PG_DATABASE_USER` y `PG_DATABASE_NAME`
-del `.env`.)
-
 ## Operación
 
 ```bash
 # Logs / estado
 docker compose logs -f server
 docker inspect twenty_server --format '{{.State.Health.Status}}'
-tail -f /opt/twenty/deploy.log
 ```
 
 **Las migraciones no corren solas**: el compose fija `DISABLE_DB_MIGRATIONS=true`
-en server y worker. `deploy.sh` las corre antes de levantar la imagen nueva. A
-mano (por ejemplo con `rebuild.sh`, el fallback manual que construye en el
-server):
+en server y worker. Con `rebuild.sh` (el fallback manual que construye en el
+server) hay que correrlas a mano:
 
 ```bash
 docker compose run --rm --no-deps -e DISABLE_CRON_JOBS_REGISTRATION=true server \
