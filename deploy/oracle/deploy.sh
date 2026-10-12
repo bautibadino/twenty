@@ -64,6 +64,11 @@ restore_previous_image() {
 
 check_preconditions() {
   log "preconditions"
+  # stepwise-upgrade.sh leaves this marker while it runs and after a failure:
+  # a normal deploy on top of a half-finished large jump would corrupt it.
+  if [ -e "$STACK_DIR/DEPLOY_HOLD" ]; then
+    die "$STACK_DIR/DEPLOY_HOLD exists: a stepwise upgrade is running or did not finish. Nothing was changed. See $STACK_DIR/stepwise-upgrade.log; remove the file only after resolving it (deploy/oracle/README.md, section 'Saltos grandes de versión')."
+  fi
   docker info > /dev/null 2>&1 < /dev/null \
     || die "docker is not usable by $(id -un) (daemon down, or user not in the docker group)"
   docker compose version > /dev/null 2>&1 < /dev/null \

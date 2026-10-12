@@ -172,6 +172,133 @@ docker compose -f docker-compose.oracle.yml up -d server worker
 (`twenty` y `default` son los valores de `PG_DATABASE_USER` y `PG_DATABASE_NAME`
 del `.env`.)
 
+## Saltos grandes de versión (`stepwise-upgrade.sh`)
+
+`deploy.sh` sirve para actualizar de una versión a la siguiente (o a unas pocas).
+Para un salto grande, como **2.18.0 -> 2.46.0**, usar `stepwise-upgrade.sh`:
+una herramienta de una sola vez que corre en la VM.
+
+### Por qué falla un salto directo
+
+Correr el código 2.46 contra un schema en un estado que upstream nunca probó
+rompe. Dos fallos reales, medidos en ensayos con una copia de la base de
+producción:
+
+1. Dos comandos de instancia de 2.18.0 se agregaron upstream después de que
+   se construyó la base de producción; el cursor de `upgrade` los saltea. Los
+   resuelve el comando del fork `run-skipped-instance-commands`.
+2. El comando de workspace `AddMessageCampaignStatFieldsCommand` (2.20.0) crea
+   una vista estándar con `type: LIST` a partir de la definición estándar
+   *actual*, pero el valor `LIST` del enum `core.view_type_enum` lo agrega un
+   comando de instancia de 2.30.0, que corre más adelante en la secuencia:
+   `invalid input value for enum core.view_type_enum: "LIST"` en 2 de los 3
+   workspaces.
+
+3. Lo mismo, minor por minor: upstream agrega comandos de instancia a minors ya
+   publicadas (2.18.0 y 2.21.0 recibieron uno después de salir). Si el cursor
+   ya pasó, `upgrade` no los corre y un comando de 2.23 falla con
+   `column ...applicationRegistration.logoFileId does not exist`.
+4. Un comando de workspace de 2.9 (`add-workflow-run-step-logs-field`) nunca
+   corrió en el workspace `sharp-beige-leopard`; el de 2.46
+   `suspend-paused-agent-steps` lee esa columna y falla.
+
+Los ensayos encontraron esos defectos de orden entre 2.18 y 2.46. El camino robusto es el
+que usó upstream: subir **una minor por vez, cada una con su imagen oficial**
+(`twentycrm/twenty:v2.19`, `v2.20`, ...), así cada comando corre con el código
+de su época. El fork no tiene cambios de schema propios, así que las imágenes
+oficiales sirven para migrar; solo la aplicación final es la del fork.
+
+### Uso
+
+Antes del corte (la VM sigue sirviendo):
+
+1. Construir/bajar la imagen final del fork y dejarla local con un tag
+   temporal: `docker pull ghcr.io/bautibadino/twenty-fork:<sha>` y
+   `docker tag ghcr.io/bautibadino/twenty-fork:<sha> twenty-fork:arm64-next`.
+2. Copiar a `/opt/twenty`: `stepwise-upgrade.sh` y el compose versionado como
+   `docker-compose.oracle.yml.new` (el `.env` ya tiene que tener las variables
+   nuevas, por ejemplo las `EMAIL_SMTP_*`).
+3. `docker login` en Docker Hub con una cuenta gratuita: sin login Docker Hub
+   limita los pulls anónimos por IP (100 por hora) y el salto hace unos 55; el
+   dry run lo verifica. Alternativa sin límite:
+   `OFFICIAL_IMAGE_REPO=mirror.gcr.io/twentycrm/twenty`.
+4. Ensayo en seco (no cambia nada; verifica docker, archivos, disco, que cada
+   tag oficial exista y el límite de pulls):
+
+```bash
+cd /opt/twenty
+./stepwise-upgrade.sh --from 2.18 --to 2.46 --skip-minors 2.33,2.36 \
+  --final-image twenty-fork:arm64-next \
+  --new-compose /opt/twenty/docker-compose.oracle.yml.new --dry-run
+```
+
+5. La corrida real, **dentro de `tmux`** (si se corta la sesión SSH, el script
+   recibe SIGHUP y hace rollback), mismo comando sin `--dry-run`.
+
+`--skip-minors`: Docker Hub **no tiene** imagen oficial de `v2.33` ni de `v2.36`
+(existen los tags de git, nunca se publicaron las imágenes). El `upgrade` de la
+imagen siguiente corre también los comandos de la minor salteada, porque la
+secuencia es acumulativa: es lo mismo que tuvo que hacer cualquier usuario de
+Docker de upstream. El dry run avisa si falta algún otro tag.
+
+Qué hace, en orden: detiene `server` y `worker`; dump verificado
+`backups/prestepwise-<fecha>.dump`; para cada minor baja la imagen, corre
+`cache:flush`, `run-instance-commands --force --include-slow` (aplica los
+comandos de instancia agregados a minors ya superadas; solo llega hasta la
+versión de esa imagen; se omite justo después de una minor salteada, porque ahí
+`upgrade` tiene que correr los comandos en el orden de upstream) y `upgrade`; tras
+el `upgrade` de la primera minor corre los comandos de workspace de
+`WORKSPACE_CATCHUP_COMMANDS` (por defecto el de 2.9 de arriba, idempotente);
+controla que no haya filas `failed` en
+`core."upgradeMigration"` y borra la imagen; después corre la imagen final del
+fork (`cache:flush`, `run-skipped-instance-commands`, `upgrade`, `cache:flush`),
+instala el compose nuevo (el viejo queda como `docker-compose.oracle.yml.pre-stepwise`),
+etiqueta la imagen anterior como `twenty-fork:arm64-previous` y la final como
+`twenty-fork:arm64`, levanta todo y espera `/healthz` desde el host. Termina con
+`STEPWISE_OK`.
+
+El log va a stdout y a `/opt/twenty/stepwise-upgrade.log`; la salida completa de
+cada comando queda en `/opt/twenty/stepwise-logs/<fecha>/`.
+Tiempos medidos en el ensayo (Mac, red hogareña): ~30 s de pull y ~20 s de
+upgrade por minor, ~27 minutos de corte total; en la VM el pull debería ser más
+rápido. El dump se conserva:
+borrarlo a mano cuando se acepte la versión nueva.
+
+### `DEPLOY_HOLD`
+
+`/opt/twenty/DEPLOY_HOLD` es un marcador que el script crea antes de tocar
+nada. Mientras exista, `deploy.sh` se niega a correr (antes de detener o cambiar
+algo) y apunta al log del salto. Se borra solo únicamente cuando el script termina
+bien. Si el salto falla y hace rollback, **queda puesto** a propósito: hay que
+leer el log, resolver la causa y recién ahí borrarlo (o volver a correr el
+script).
+
+### Rollback automático
+
+Ante **cualquier** error después de detener la aplicación (incluidos errores
+inesperados, Ctrl-C y SIGHUP) el script restaura solo, sin pérdida de datos
+porque la aplicación está parada desde el dump:
+
+1. recrea la base desde el dump (corta conexiones, `drop database`,
+   `pg_restore`) y verifica que las cuentas coincidan con las de antes de
+   empezar (`upgradeMigration` por estado, `metadataVersion` y cantidades por
+   workspace);
+2. devuelve el compose viejo y el tag de la imagen vieja;
+3. hace `cache:flush` con la imagen vieja, levanta `server` y `worker` y espera
+   que estén sanos;
+4. deja `DEPLOY_HOLD` y termina con exit distinto de cero y la última línea
+   `STEPWISE_FAILED_ROLLED_BACK`.
+
+Si el rollback mismo falla, la última línea es `STEPWISE_FAILED_ROLLBACK_FAILED`
+(exit 3) con el estado en que quedó todo y la ruta del dump para restaurar a mano
+(ver "Restaurar el dump pre-deploy" arriba). Si falla antes de detener la
+aplicación, la línea es `STEPWISE_ABORTED_NOTHING_CHANGED`.
+
+Volver a correr el script después de un rollback es seguro: el `upgrade` de una
+versión que la base ya alcanzó no hace nada. `STEPWISE_TEST_FAIL_AT=<minor>` es un
+gancho de prueba que fuerza una falla justo antes de esa minor; no usar en
+producción.
+
 ## Backup diario
 
 `backup-twenty.sh` hace un `pg_dump -Fc` verificado de la base y un `tar.gz` del
