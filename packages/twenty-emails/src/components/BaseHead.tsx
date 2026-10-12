@@ -1,6 +1,6 @@
-import { Font, Head } from '@react-email/components';
+import { Font, Head } from 'react-email';
 
-import { emailTheme } from 'src/common-style';
+import { canvasTheme } from 'src/common-style';
 import { getAppName } from 'src/utils/branding';
 
 export const BaseHead = () => {
@@ -8,10 +8,10 @@ export const BaseHead = () => {
     <Head>
       <title>{`${getAppName()} email`}</title>
       <Font
-        fontFamily={emailTheme.font.family}
+        fontFamily={canvasTheme.font.family}
         fallbackFontFamily="sans-serif"
         fontStyle="normal"
-        fontWeight={emailTheme.font.weight.regular}
+        fontWeight={canvasTheme.font.weight.regular}
       />
     </Head>
   );

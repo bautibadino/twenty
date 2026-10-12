@@ -5,6 +5,8 @@ export const mockedClientConfig: ClientConfig = {
   aiModels: [],
   appName: 'Twenty',
   isLandingPageEnabled: false,
+  aiEvaluationModels: [],
+  aiModelTiers: [],
   signInPrefilled: true,
   isMultiWorkspaceEnabled: false,
   isEmailVerificationRequired: false,
@@ -16,6 +18,7 @@ export const mockedClientConfig: ClientConfig = {
     sso: [],
   },
   frontDomain: 'localhost',
+  serverUrl: 'http://localhost:3000',
   defaultSubdomain: 'app',
   analyticsEnabled: true,
   support: {
@@ -48,9 +51,10 @@ export const mockedClientConfig: ClientConfig = {
   api: { mutationMaximumAffectedRecords: 100 },
   onboarding: {
     importContactsCreditsReward: 2,
-    inviteTeamMaxCreditsReward: 9,
     inviteTeamCreditsRewardPerUser: 3,
-    upgradeCreditsReward: 5,
+    createProfileCreditsReward: 0.5,
+    upgradeCreditsReward: 2,
+    inviteTeamMaxInvites: 10,
   },
   canManageFeatureFlags: true,
   publicFeatureFlags: [],
@@ -67,4 +71,7 @@ export const mockedClientConfig: ClientConfig = {
   isCloudflareIntegrationEnabled: false,
   isClickHouseConfigured: false,
   isWorkspaceSchemaDDLLocked: false,
+  isOnboardingAiChatEnabled: false,
+  isBookCallOnboardingStepEnabled: false,
+  isCompanyEnrichmentEnabled: false,
 };

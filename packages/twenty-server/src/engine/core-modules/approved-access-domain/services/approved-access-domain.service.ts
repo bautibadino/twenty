@@ -2,8 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 
 import { msg } from '@lingui/core/macro';
-import { render } from '@react-email/render';
-import { SendApprovedAccessDomainValidation } from 'twenty-emails';
+import { SendApprovedAccessDomainValidation, renderEmail } from 'twenty-emails';
 import { FileFolder, SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath, isDefined } from 'twenty-shared/utils';
 import { Repository } from 'typeorm';
@@ -86,6 +85,7 @@ export class ApprovedAccessDomainService {
           workspaceId: workspace.id,
         }),
       },
+      hash: 'invite',
     });
 
     if (!isDefined(sender.userEmail)) {
@@ -115,8 +115,8 @@ export class ApprovedAccessDomainService {
       serverUrl: this.twentyConfigService.get('SERVER_URL'),
       locale: sender.locale,
     });
-    const html = await render(emailTemplate);
-    const text = await render(emailTemplate, {
+    const html = await renderEmail(emailTemplate);
+    const text = await renderEmail(emailTemplate, {
       plainText: true,
     });
 
@@ -230,10 +230,13 @@ export class ApprovedAccessDomainService {
       );
     }
 
-    return this.approvedAccessDomainRepository.save(
+    await this.approvedAccessDomainRepository.update(
       approvedAccessDomain.workspaceId,
-      { ...approvedAccessDomain, isValidated: true },
+      { id: approvedAccessDomain.id },
+      { isValidated: true },
     );
+
+    return { ...approvedAccessDomain, isValidated: true };
   }
 
   async createApprovedAccessDomain(
@@ -264,10 +267,11 @@ export class ApprovedAccessDomainService {
       );
     }
 
-    const approvedAccessDomain = await this.approvedAccessDomainRepository.save(
-      inWorkspace.id,
-      { domain },
-    );
+    const approvedAccessDomain =
+      await this.approvedAccessDomainRepository.insertAndReturnOne(
+        inWorkspace.id,
+        { domain },
+      );
 
     await this.sendApprovedAccessDomainValidationEmail(
       fromWorkspaceMember,
@@ -299,13 +303,13 @@ export class ApprovedAccessDomainService {
     return this.approvedAccessDomainRepository.find(workspace.id);
   }
 
-  async findValidatedApprovedAccessDomainWithWorkspacesAndSSOIdentityProvidersDomain(
+  async findValidatedApprovedAccessDomainWithWorkspacesAndSsoIdentityProvidersDomain(
     domain: string,
   ) {
     return this.approvedAccessDomainRepositoryUnscoped.find({
       relations: [
         'workspace',
-        'workspace.workspaceSSOIdentityProviders',
+        'workspace.workspaceSsoIdentityProviders',
         'workspace.approvedAccessDomains',
       ],
       where: {

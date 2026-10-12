@@ -1,5 +1,8 @@
 import { faker } from '@faker-js/faker';
-import { type FieldMetadataType } from 'twenty-shared/types';
+import {
+  type FieldMetadataType,
+  MetadataWritability,
+} from 'twenty-shared/types';
 
 import { type ApplicationEntity } from 'src/engine/core-modules/application/application.entity';
 import { type WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
@@ -13,21 +16,25 @@ type GetMockFieldMetadataEntityOverride<
     Pick<FieldMetadataEntity<T>, 'workspaceId' | 'objectMetadataId' | 'type'>
   >;
 
-// Should be renamed to abstract
+// TODO: rename to abstract
 export const getMockFieldMetadataEntity = <
   T extends FieldMetadataType = FieldMetadataType.TEXT,
 >(
   overrides: GetMockFieldMetadataEntityOverride<T>,
 ): FieldMetadataEntity => {
   return {
+    isSearchable: false,
+    isAuditLogged: true,
     isSystemSideEffect: false,
     workspace: {} as WorkspaceEntity,
     calendarViews: [],
+    calendarEndViews: [],
     mainGroupByFieldMetadataViews: [],
     viewFilters: [],
     viewFields: [],
     kanbanAggregateOperationViews: [],
     viewSorts: [],
+    searchFieldMetadatas: [],
     morphId: null,
     fieldPermissions: [],
     icon: null,
@@ -35,6 +42,7 @@ export const getMockFieldMetadataEntity = <
     isLabelSyncedWithName: false,
     isNullable: null,
     isUIEditable: true,
+    writability: MetadataWritability.OPEN,
     isSystem: false,
     isUnique: null,
     object: {} as ObjectMetadataEntity,
@@ -42,7 +50,9 @@ export const getMockFieldMetadataEntity = <
     relationTargetFieldMetadataId: null,
     relationTargetObjectMetadata: null,
     relationTargetObjectMetadataId: null,
-    standardOverrides: null,
+    overrides: null,
+    standardOverrides:
+      null as unknown as FieldMetadataEntity['standardOverrides'],
     id: faker.string.uuid(),
     name: 'defaultFieldMetadataName',
     label: 'Default field metadata entity label',

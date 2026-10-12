@@ -1,31 +1,33 @@
+import { NavigationButton } from '@/ui/input/components/NavigationButton';
+
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { SettingsTabBar } from '@/settings/components/layout/SettingsTabBar';
+import { useSettingsActiveTabId } from '@/settings/components/layout/useSettingsActiveTabId';
 import { SettingsDiscoveryHeroCard } from '@/settings/components/SettingsDiscoveryHeroCard';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
 import { SettingsApiKeysTable } from '@/settings/developers/components/SettingsApiKeysTable';
 import { SettingsWebhooksTable } from '@/settings/developers/components/SettingsWebhooksTable';
-import { PlaygroundSetupForm } from '@/settings/playground/components/PlaygroundSetupForm';
-import { SettingsMcpSetup } from '@/settings/playground/components/SettingsMcpSetup';
-import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
-import PlaygroundCoverDark from '@/settings/playground/assets/cover-dark.png';
-import PlaygroundCoverLight from '@/settings/playground/assets/cover-light.png';
-import { SettingsTabBar } from '@/settings/components/layout/SettingsTabBar';
-import { useSettingsActiveTabId } from '@/settings/components/layout/useSettingsActiveTabId';
-import { useIsMobile } from '@/ui/utilities/responsive/hooks/useIsMobile';
+import PlaygroundCoverDark from '@/settings/mcp-and-apis/assets/cover-dark.png';
+import PlaygroundCoverLight from '@/settings/mcp-and-apis/assets/cover-light.png';
+import McpCoverDark from '@/settings/mcp-and-apis/assets/mcp-cover-dark.png';
+import McpCoverLight from '@/settings/mcp-and-apis/assets/mcp-cover-light.png';
+import { PlaygroundSetupForm } from '@/settings/mcp-and-apis/components/PlaygroundSetupForm';
+import { SettingsMcpSetup } from '@/settings/mcp-and-apis/components/SettingsMcpSetup';
+import { useIsMobile } from 'twenty-ui/utilities';
 import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath } from 'twenty-shared/utils';
+import { Section } from 'twenty-ui/components/layout';
 import {
-  IconBrandGraphql,
-  IconCode,
+  IconApi,
   IconPlus,
-  IconRobot,
+  IconSparkle2,
+  IconSparkles,
   IconWebhook,
 } from 'twenty-ui/icon';
-import { H2Title } from 'twenty-ui/typography';
-import { Button } from 'twenty-ui/input';
-import { Section } from 'twenty-ui/layout';
-import { MOBILE_VIEWPORT, themeCssVariables } from 'twenty-ui/theme-constants';
-import { SETTINGS_API_WEBHOOKS_TABS } from '~/pages/settings/api-webhooks/constants/SettingsApiWebhooksTabs';
+import { MOBILE_VIEWPORT, themeCssVariables } from 'twenty-ui/theme';
+import { SETTINGS_API_WEBHOOKS_TABS } from '@/settings/developers/constants/SettingsApiWebhooksTabs';
 
 type TabKey =
   (typeof SETTINGS_API_WEBHOOKS_TABS.TABS_IDS)[keyof typeof SETTINGS_API_WEBHOOKS_TABS.TABS_IDS];
@@ -61,14 +63,14 @@ export const SettingsApiWebhooks = () => {
 
   const tabs = [
     {
-      id: SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.API,
-      title: t`API`,
-      Icon: IconCode,
-    },
-    {
       id: SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.MCP,
       title: t`MCP`,
-      Icon: IconRobot,
+      Icon: IconSparkles,
+    },
+    {
+      id: SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.API,
+      title: t`API`,
+      Icon: IconApi,
     },
     {
       id: SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.WEBHOOKS,
@@ -81,13 +83,16 @@ export const SettingsApiWebhooks = () => {
     (useSettingsActiveTabId(
       SETTINGS_API_WEBHOOKS_TABS.COMPONENT_INSTANCE_ID,
       tabs.map((tab) => tab.id),
-    ) as TabKey) ?? SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.API;
+    ) as TabKey) ?? SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.MCP;
+
+  const isMcpTab = activeTab === SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.MCP;
 
   return (
     <SettingsPageLayout
-      title={t`APIs & Webhooks`}
+      title={t`MCP & APIs`}
       secondaryBar={
         <SettingsTabBar
+          aria-label={t`APIs and webhooks`}
           tabs={tabs}
           componentInstanceId={SETTINGS_API_WEBHOOKS_TABS.COMPONENT_INSTANCE_ID}
         />
@@ -97,61 +102,55 @@ export const SettingsApiWebhooks = () => {
           children: t`Workspace`,
           href: getSettingsPath(SettingsPath.General),
         },
-        { children: t`APIs & Webhooks` },
+        { children: t`MCP & APIs` },
       ]}
     >
       <SettingsPageContainer>
-        <Section>
+        <Section.Root>
           <SettingsDiscoveryHeroCard
-            lightSrc={PlaygroundCoverLight}
-            darkSrc={PlaygroundCoverDark}
+            lightSrc={isMcpTab ? McpCoverLight : PlaygroundCoverLight}
+            darkSrc={isMcpTab ? McpCoverDark : PlaygroundCoverDark}
             instanceIdPrefix={SETTINGS_API_HERO_INSTANCE_ID_PREFIX}
             tabs={[
               {
-                id: 'rest',
-                title: t`REST`,
-                Icon: IconCode,
-                vimeoId: '928786722',
-              },
-              {
-                id: 'graphql',
-                title: t`GraphQL`,
-                Icon: IconBrandGraphql,
-                vimeoId: '928786722',
+                id: 'api_webhook_walkthrough',
+                title: t`Walkthrough`,
+                Icon: IconSparkle2,
+                vimeoId: '1217967646',
+                hasSound: true,
               },
             ]}
             playButtonAriaLabel={t`Watch API demo`}
           />
-        </Section>
+        </Section.Root>
 
         {activeTab === SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.API && (
           <StyledTabContent>
-            <Section>
-              <H2Title
+            <Section.Root>
+              <Section.Header
                 title={t`Documentation`}
                 description={t`Try our REST or GraphQL API playgrounds`}
               />
               <PlaygroundSetupForm />
-            </Section>
+            </Section.Root>
 
-            <Section>
-              <H2Title
+            <Section.Root>
+              <Section.Header
                 title={t`API Keys`}
                 description={t`Active API keys created by you or your team.`}
               />
               <StyledTableContainer isMobile={isMobile}>
                 <SettingsApiKeysTable />
                 <StyledButtonContainer>
-                  <Button
-                    Icon={IconPlus}
-                    title={t`Create API key`}
-                    size="small"
-                    variant="secondary"
+                  <NavigationButton
+                    startIcon={<IconPlus />}
+                    size="sm"
                     to={getSettingsPath(SettingsPath.NewApiKey)}
-                  />
+                    variant="outline"
+                  >{t`Create API key`}</NavigationButton>
                 </StyledButtonContainer>
               </StyledTableContainer>
-            </Section>
+            </Section.Root>
           </StyledTabContent>
         )}
 
@@ -163,24 +162,23 @@ export const SettingsApiWebhooks = () => {
 
         {activeTab === SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.WEBHOOKS && (
           <StyledTabContent>
-            <Section>
-              <H2Title
+            <Section.Root>
+              <Section.Header
                 title={t`Webhooks`}
                 description={t`Establish Webhook endpoints for notifications on asynchronous events.`}
               />
               <StyledTableContainer isMobile={isMobile}>
                 <SettingsWebhooksTable />
                 <StyledButtonContainer>
-                  <Button
-                    Icon={IconPlus}
-                    title={t`Create webhook`}
-                    size="small"
-                    variant="secondary"
+                  <NavigationButton
+                    startIcon={<IconPlus />}
+                    size="sm"
                     to={getSettingsPath(SettingsPath.NewWebhook)}
-                  />
+                    variant="outline"
+                  >{t`Create webhook`}</NavigationButton>
                 </StyledButtonContainer>
               </StyledTableContainer>
-            </Section>
+            </Section.Root>
           </StyledTabContent>
         )}
       </SettingsPageContainer>

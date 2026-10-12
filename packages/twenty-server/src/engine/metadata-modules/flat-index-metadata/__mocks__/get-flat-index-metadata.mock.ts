@@ -1,7 +1,7 @@
 import { faker } from '@faker-js/faker';
 
 import { type FlatIndexMetadata } from 'src/engine/metadata-modules/flat-index-metadata/types/flat-index-metadata.type';
-import { IndexType } from 'src/engine/metadata-modules/index-metadata/types/indexType.types';
+import { IndexType } from 'twenty-shared/types';
 
 type FlatIndexMetadataOverrides = Required<
   Pick<
@@ -34,13 +34,4 @@ export const getFlatIndexMetadataMock = (
     applicationId: faker.string.uuid(),
     ...overrides,
   };
-};
-
-export const getStandardFlatIndexMetadataMock = (
-  overrides: Omit<FlatIndexMetadataOverrides, 'isCustom'>,
-) => {
-  return getFlatIndexMetadataMock({
-    isCustom: false,
-    ...overrides,
-  });
 };

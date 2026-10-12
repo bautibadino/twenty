@@ -1,20 +1,31 @@
 import { SettingsEmptyPlaceholder } from '@/settings/components/SettingsEmptyPlaceholder';
-import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
+import { DropdownRoot } from '@/ui/layout/dropdown/components/DropdownRoot';
 import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
-import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
 import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
+import { InlineBanner } from 'twenty-ui/components/feedback';
+import { SearchInput } from 'twenty-ui/components/input';
+import { Section } from 'twenty-ui/components/layout';
+import { Dropdown } from 'twenty-ui/components/navigation';
+import { SettingsRow } from 'twenty-ui/components/settings';
 import { IconSparkles } from 'twenty-ui/icon';
-import { SearchInput } from 'twenty-ui/input';
-import { Section } from 'twenty-ui/layout';
-import { MenuItemToggle } from 'twenty-ui/navigation';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
-import { useMarketplaceApps } from '~/modules/marketplace/hooks/useMarketplaceApps';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { useMarketplaceApps } from '@/marketplace/hooks/useMarketplaceApps';
 import { SettingsAvailableApplicationCard } from '~/pages/settings/applications/components/SettingsAvailableApplicationCard';
 
 const StyledSearchInputContainer = styled.div`
   padding-bottom: ${themeCssVariables.spacing[2]};
+`;
+
+const StyledContentContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[3]};
+`;
+
+const StyledNotVettedContainer = styled.div`
+  margin-top: ${themeCssVariables.spacing[3]};
 `;
 
 const StyledCardsGrid = styled.div`
@@ -40,7 +51,7 @@ const StyledHintLink = styled.button`
 export const SettingsApplicationsAvailableTab = () => {
   const { t } = useLingui();
   const [searchTerm, setSearchTerm] = useState('');
-  const [showFeaturedOnly, setShowFeaturedOnly] = useState(true);
+  const [showVettedOnly, setShowVettedOnly] = useState(true);
 
   const { data: marketplaceApps, isLoading } = useMarketplaceApps();
 
@@ -56,80 +67,98 @@ export const SettingsApplicationsAvailableTab = () => {
       })
     : marketplaceApps;
 
-  const filteredApplications = showFeaturedOnly
-    ? textFilteredApplications.filter((application) => application.isFeatured)
-    : textFilteredApplications;
+  const vettedApplications = textFilteredApplications.filter(
+    (application) => application.isVetted,
+  );
 
-  const nonFeaturedCount = showFeaturedOnly
-    ? textFilteredApplications.filter((application) => !application.isFeatured)
-        .length
-    : 0;
+  const nonVettedApplications = textFilteredApplications.filter(
+    (application) => !application.isVetted,
+  );
 
   if (isLoading) {
     return (
-      <Section>
+      <Section.Root>
         <SettingsEmptyPlaceholder padding="4">{t`Loading applications...`}</SettingsEmptyPlaceholder>
-      </Section>
+      </Section.Root>
     );
   }
 
-  const showNonFeaturedHint =
-    filteredApplications.length === 0 && nonFeaturedCount > 0;
+  const showNonVettedHint =
+    showVettedOnly &&
+    vettedApplications.length === 0 &&
+    nonVettedApplications.length > 0;
+
+  const hasNoApplications = textFilteredApplications.length === 0;
 
   return (
-    <Section>
+    <Section.Root>
       <StyledSearchInputContainer>
         <SearchInput
           placeholder={t`Search an application`}
           value={searchTerm}
-          onChange={setSearchTerm}
-          filterDropdown={(filterButton: ReactNode) => (
-            <Dropdown
-              dropdownId="marketplace-filter-dropdown"
-              dropdownPlacement="bottom-end"
-              dropdownOffset={{ x: 0, y: 8 }}
-              clickableComponent={filterButton}
-              dropdownComponents={
-                <DropdownContent>
-                  <DropdownMenuItemsContainer>
-                    <MenuItemToggle
-                      LeftIcon={IconSparkles}
-                      onToggleChange={() =>
-                        setShowFeaturedOnly(!showFeaturedOnly)
-                      }
-                      toggled={showFeaturedOnly}
-                      text={t`Featured only`}
-                      toggleSize="small"
-                    />
-                  </DropdownMenuItemsContainer>
-                </DropdownContent>
-              }
-            />
+          onValueChange={setSearchTerm}
+          filterDropdown={(filterButton) => (
+            <DropdownRoot dropdownId="marketplace-filter-dropdown" type="panel">
+              <Dropdown.Trigger render={filterButton} />
+              <DropdownContent
+                side="bottom"
+                align="end"
+                sideOffset={8}
+                alignOffset={0}
+              >
+                <Dropdown.Section>
+                  <SettingsRow
+                    startElement={<IconSparkles />}
+                    onCheckedChange={() => setShowVettedOnly(!showVettedOnly)}
+                    checked={showVettedOnly}
+                  >{t`Vetted only`}</SettingsRow>
+                </Dropdown.Section>
+              </DropdownContent>
+            </DropdownRoot>
           )}
         />
       </StyledSearchInputContainer>
 
-      {filteredApplications.length === 0 ? (
+      {hasNoApplications ||
+      (showVettedOnly && vettedApplications.length === 0) ? (
         <SettingsEmptyPlaceholder padding="4">
-          {showNonFeaturedHint
-            ? t`No featured applications found. ${nonFeaturedCount} non-featured result(s) available — `
+          {showNonVettedHint
+            ? t`No vetted applications found. ${nonVettedApplications.length} non-vetted result(s) available — `
             : t`No applications available`}
-          {showNonFeaturedHint && (
-            <StyledHintLink onClick={() => setShowFeaturedOnly(false)}>
+          {showNonVettedHint && (
+            <StyledHintLink onClick={() => setShowVettedOnly(false)}>
               {t`show all`}
             </StyledHintLink>
           )}
         </SettingsEmptyPlaceholder>
       ) : (
-        <StyledCardsGrid>
-          {filteredApplications.map((application) => (
-            <SettingsAvailableApplicationCard
-              key={application.id}
-              application={application}
-            />
-          ))}
-        </StyledCardsGrid>
+        <StyledContentContainer>
+          {vettedApplications.length > 0 && (
+            <StyledCardsGrid>
+              {vettedApplications.map((application) => (
+                <SettingsAvailableApplicationCard
+                  key={application.id}
+                  application={application}
+                />
+              ))}
+            </StyledCardsGrid>
+          )}
+
+          {!showVettedOnly && nonVettedApplications.length > 0 && (
+            <StyledNotVettedContainer>
+              <InlineBanner status="warning">{t`Applications below are not vetted. Use at your own risk.`}</InlineBanner>
+              <StyledCardsGrid>
+                {nonVettedApplications.map((application) => (
+                  <SettingsAvailableApplicationCard
+                    key={application.id}
+                    application={application}
+                  />
+                ))}
+              </StyledCardsGrid>
+            </StyledNotVettedContainer>
+          )}
+        </StyledContentContainer>
       )}
-    </Section>
+    </Section.Root>
   );
 };

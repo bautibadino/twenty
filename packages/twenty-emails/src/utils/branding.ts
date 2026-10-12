@@ -3,7 +3,8 @@ const DEFAULT_APP_NAME = 'Twenty';
 const DEFAULT_LOGO_URL =
   'https://app.twenty.com/images/icons/windows11/Square150x150Logo.scale-100.png';
 
-export const getAppName = () => process.env.APP_NAME?.trim() || DEFAULT_APP_NAME;
+export const getAppName = () =>
+  process.env.APP_NAME?.trim() || DEFAULT_APP_NAME;
 
 /**
  * Con APP_NAME sin definir todo queda exactamente igual que en upstream:

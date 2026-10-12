@@ -3,12 +3,15 @@ import {
   type AuthProviders,
   type Billing,
   type Captcha,
+  type ClientAiEvaluationModelConfig,
   type ClientAiModelConfig,
+  type ClientAiModelTierConfig,
   type ClientConfigMaintenanceMode,
   type PublicFeatureFlag,
   type Sentry,
   type Support,
 } from '~/generated-metadata/graphql';
+import { type EnterpriseInstanceType } from 'twenty-shared/constants';
 import { type OnboardingConfig } from '@/client-config/types/OnboardingConfig';
 
 export type ClientConfig = {
@@ -17,15 +20,20 @@ export type ClientConfig = {
   appLogoUrl?: string;
   isLandingPageEnabled: boolean;
   aiModels: Array<ClientAiModelConfig>;
+  aiEvaluationModels: Array<ClientAiEvaluationModelConfig>;
+  aiModelTiers: Array<ClientAiModelTierConfig>;
   analyticsEnabled: boolean;
   api: ApiConfig;
   authProviders: AuthProviders;
   billing: Billing;
   calendarBookingPageId?: string;
+  isBookCallOnboardingStepEnabled: boolean;
+  isCompanyEnrichmentEnabled: boolean;
   canManageFeatureFlags: boolean;
   captcha: Captcha;
   defaultSubdomain?: string;
   frontDomain: string;
+  serverUrl: string;
   publicFunctionDomain?: string | null;
   isAttachmentPreviewEnabled: boolean;
   isConfigVariablesInDbEnabled: boolean;
@@ -40,7 +48,8 @@ export type ClientConfig = {
   isCloudflareIntegrationEnabled: boolean;
   isClickHouseConfigured: boolean;
   isWorkspaceSchemaDDLLocked: boolean;
-  onboarding: OnboardingConfig;
+  isOnboardingAiChatEnabled: boolean;
+  onboarding: OnboardingConfig | null;
   publicFeatureFlags: Array<PublicFeatureFlag>;
   sentry: Sentry;
   signInPrefilled: boolean;
@@ -48,4 +57,5 @@ export type ClientConfig = {
   isTwoFactorAuthenticationEnabled: boolean;
   allowRequestsToTwentyIcons: boolean;
   maintenance?: ClientConfigMaintenanceMode;
+  enterpriseInstanceType?: EnterpriseInstanceType;
 };

@@ -1,12 +1,12 @@
 import { styled } from '@linaria/react';
 import { useLingui } from '@lingui/react/macro';
-import { useNavigate } from 'react-router-dom';
 import { AppPath } from 'twenty-shared/types';
-import { MainButton } from 'twenty-ui/input';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { MainButton } from 'twenty-ui/components/input';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 import { Logo } from '@/auth/components/Logo';
 import { appNameState } from '@/client-config/states/appNameState';
+import { UndecoratedLink } from '@/ui/navigation/link/components/UndecoratedLink/UndecoratedLink';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
 const StyledContainer = styled.div`
@@ -49,12 +49,7 @@ const StyledCtaContainer = styled.div`
 
 export const LandingPage = () => {
   const { t } = useLingui();
-  const navigate = useNavigate();
   const appName = useAtomStateValue(appNameState);
-
-  const handleGetStarted = () => {
-    navigate(AppPath.SignInUp);
-  };
 
   return (
     <StyledContainer>
@@ -65,11 +60,9 @@ export const LandingPage = () => {
           {t`The CRM your whole team will love. Create your workspace in minutes and start organizing your business today.`}
         </StyledSubtitle>
         <StyledCtaContainer>
-          <MainButton
-            title={t`Get started for free`}
-            onClick={handleGetStarted}
-            fullWidth
-          />
+          <UndecoratedLink to={AppPath.SignInUp}>
+            <MainButton title={t`Get started for free`} fullWidth />
+          </UndecoratedLink>
         </StyledCtaContainer>
       </StyledHero>
     </StyledContainer>

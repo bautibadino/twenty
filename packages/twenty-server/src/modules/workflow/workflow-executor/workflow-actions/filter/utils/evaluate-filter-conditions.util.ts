@@ -4,6 +4,8 @@ import {
   isObject,
   isString,
 } from '@sniptt/guards';
+import isEqual from 'lodash.isequal';
+import { Temporal } from 'temporal-polyfill';
 import {
   type StepFilter,
   type StepFilterGroup,
@@ -13,6 +15,11 @@ import {
 import {
   convertViewFilterOperandToCoreOperand as convertViewFilterOperandDeprecated,
   isDefined,
+  isMatchingMultiSelectFilter,
+  isMatchingSelectFilter,
+  isSamePlainDate,
+  parseJson,
+  parseToInstantOrThrow,
 } from 'twenty-shared/utils';
 import { parseBooleanFromStringValue } from 'twenty-shared/workflow';
 
@@ -133,7 +140,6 @@ function evaluateFilterGroup(
 }
 
 function contains(leftValue: unknown, rightValue: unknown): boolean {
-  // if two arrays, check if any item is in the other array
   if (Array.isArray(leftValue) && Array.isArray(rightValue)) {
     return leftValue.some((item) => rightValue.includes(item));
   }
@@ -142,17 +148,13 @@ function contains(leftValue: unknown, rightValue: unknown): boolean {
     (Array.isArray(leftValue) || isString(leftValue)) &&
     isString(rightValue)
   ) {
-    try {
-      const parsedRightValue = JSON.parse(rightValue as string);
+    const parsedRightValue = parseJson<unknown>(rightValue);
 
-      if (Array.isArray(parsedRightValue)) {
-        return parsedRightValue.some((item) => leftValue.includes(item));
-      } else {
-        return leftValue.includes(parsedRightValue);
-      }
-    } catch {
-      return leftValue.includes(rightValue);
+    if (Array.isArray(parsedRightValue)) {
+      return parsedRightValue.some((item) => leftValue.includes(item));
     }
+
+    return leftValue.includes(rightValue);
   }
 
   return String(leftValue).includes(String(rightValue));
@@ -183,6 +185,10 @@ function evaluateTextAndArrayFilter(
         (isDefined(nullEquivalentRightValue) &&
           isNotEmptyTextOrArray(filter.leftOperand))
       );
+    case ViewFilterOperand.IS:
+      return isEqual(filter.leftOperand, filter.rightOperand);
+    case ViewFilterOperand.IS_NOT:
+      return !isEqual(filter.leftOperand, filter.rightOperand);
     case ViewFilterOperand.IS_EMPTY:
       return !isNotEmptyTextOrArray(filter.leftOperand);
 
@@ -214,46 +220,83 @@ function evaluateBooleanFilter(filter: ResolvedFilter): boolean {
   }
 }
 
+function parseDateOperandToInstant(value: unknown): Temporal.Instant | null {
+  try {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return Temporal.Instant.fromEpochMilliseconds(value.getTime());
+    }
+
+    return parseToInstantOrThrow(String(value));
+  } catch {
+    return null;
+  }
+}
+
+function toUtcPlainDate(instant: Temporal.Instant): Temporal.PlainDate {
+  return instant.toZonedDateTimeISO('UTC').toPlainDate();
+}
+
 function evaluateDateFilter(filter: ResolvedFilter): boolean {
-  // TODO: refactor this with Temporal
-  const dateLeftValue = new Date(String(filter.leftOperand));
+  if (filter.operand === ViewFilterOperand.IS_EMPTY) {
+    return !isDefined(filter.leftOperand) || filter.leftOperand === '';
+  }
+
+  if (filter.operand === ViewFilterOperand.IS_NOT_EMPTY) {
+    return isDefined(filter.leftOperand) && filter.leftOperand !== '';
+  }
+
+  const leftInstant = parseDateOperandToInstant(filter.leftOperand);
+
+  if (!isDefined(leftInstant)) {
+    return false;
+  }
 
   switch (filter.operand) {
-    case ViewFilterOperand.IS:
+    case ViewFilterOperand.IS: {
+      const rightInstant = parseDateOperandToInstant(filter.rightOperand);
+
       return (
-        dateLeftValue.getDate() ===
-        new Date(String(filter.rightOperand)).getDate()
+        isDefined(rightInstant) &&
+        isSamePlainDate(
+          toUtcPlainDate(leftInstant),
+          toUtcPlainDate(rightInstant),
+        )
       );
+    }
+
     case ViewFilterOperand.IS_IN_PAST:
-      return dateLeftValue.getTime() < Date.now();
+      return Temporal.Instant.compare(leftInstant, Temporal.Now.instant()) < 0;
 
     case ViewFilterOperand.IS_IN_FUTURE:
-      return dateLeftValue.getTime() > Date.now();
+      return Temporal.Instant.compare(leftInstant, Temporal.Now.instant()) > 0;
 
     case ViewFilterOperand.IS_TODAY:
-      return dateLeftValue.toDateString() === new Date().toDateString();
-
-    case ViewFilterOperand.IS_BEFORE:
-      return (
-        dateLeftValue.getTime() <
-        new Date(String(filter.rightOperand)).getTime()
+      return isSamePlainDate(
+        toUtcPlainDate(leftInstant),
+        Temporal.Now.zonedDateTimeISO('UTC').toPlainDate(),
       );
 
-    case ViewFilterOperand.IS_AFTER:
+    case ViewFilterOperand.IS_BEFORE: {
+      const rightInstant = parseDateOperandToInstant(filter.rightOperand);
+
       return (
-        dateLeftValue.getTime() >
-        new Date(String(filter.rightOperand)).getTime()
+        isDefined(rightInstant) &&
+        Temporal.Instant.compare(leftInstant, rightInstant) < 0
       );
+    }
 
-    case ViewFilterOperand.IS_EMPTY:
-      return !isDefined(filter.leftOperand) || filter.leftOperand === '';
+    case ViewFilterOperand.IS_AFTER: {
+      const rightInstant = parseDateOperandToInstant(filter.rightOperand);
 
-    case ViewFilterOperand.IS_NOT_EMPTY:
-      return isDefined(filter.leftOperand) && filter.leftOperand !== '';
+      return (
+        isDefined(rightInstant) &&
+        Temporal.Instant.compare(leftInstant, rightInstant) > 0
+      );
+    }
 
     case ViewFilterOperand.IS_RELATIVE:
       return parseAndEvaluateRelativeDateFilter({
-        dateToCheck: dateLeftValue,
+        dateToCheck: new Date(leftInstant.epochMilliseconds),
         relativeDateString: String(filter.rightOperand),
       });
 
@@ -383,28 +426,33 @@ function evaluateCurrencyFilter(filter: ResolvedFilter): boolean {
   }
 }
 
+function isEmptyNumberValue(value: unknown): boolean {
+  return !isDefined(value) || value === '';
+}
+
 function evaluateNumberFilter(filter: ResolvedFilter): boolean {
   const leftValue = filter.leftOperand;
   const rightValue = filter.rightOperand;
+  const isLeftValueEmpty = isEmptyNumberValue(leftValue);
 
   switch (filter.operand) {
     case ViewFilterOperand.GREATER_THAN_OR_EQUAL:
-      return Number(leftValue) >= Number(rightValue);
+      return !isLeftValueEmpty && Number(leftValue) >= Number(rightValue);
 
     case ViewFilterOperand.LESS_THAN_OR_EQUAL:
-      return Number(leftValue) <= Number(rightValue);
+      return !isLeftValueEmpty && Number(leftValue) <= Number(rightValue);
 
     case ViewFilterOperand.IS_EMPTY:
-      return !isDefined(filter.leftOperand) || filter.leftOperand === '';
+      return isLeftValueEmpty;
 
     case ViewFilterOperand.IS_NOT_EMPTY:
-      return isDefined(filter.leftOperand) && filter.leftOperand !== '';
+      return !isLeftValueEmpty;
 
     case ViewFilterOperand.IS:
-      return Number(leftValue) === Number(rightValue);
+      return !isLeftValueEmpty && Number(leftValue) === Number(rightValue);
 
     case ViewFilterOperand.IS_NOT:
-      return Number(leftValue) !== Number(rightValue);
+      return isLeftValueEmpty || Number(leftValue) !== Number(rightValue);
 
     default:
       throw new Error(
@@ -441,12 +489,68 @@ function evaluateDefaultFilter(filter: ResolvedFilter): boolean {
   }
 }
 
+function parseSelectFilterOptions(rightOperand: unknown): string[] {
+  if (Array.isArray(rightOperand)) {
+    return rightOperand.filter(isString);
+  }
+
+  if (isString(rightOperand)) {
+    try {
+      const parsedRightOperand: unknown = JSON.parse(rightOperand);
+
+      if (Array.isArray(parsedRightOperand)) {
+        return parsedRightOperand.filter(isString);
+      }
+
+      return [rightOperand];
+    } catch {
+      return [rightOperand];
+    }
+  }
+
+  return [];
+}
+
+function isMatchingSelectedOption(
+  leftOperand: unknown,
+  options: string[],
+): boolean {
+  const nonEmptyOptions = options.filter((option) => option !== '');
+  const hasEmptyOption = nonEmptyOptions.length !== options.length;
+
+  if (Array.isArray(leftOperand)) {
+    return (
+      isMatchingMultiSelectFilter({
+        multiSelectFilter: { containsAny: nonEmptyOptions },
+        value: leftOperand,
+      }) ||
+      (hasEmptyOption && leftOperand.length === 0)
+    );
+  }
+
+  const value = isString(leftOperand) ? leftOperand : null;
+
+  return (
+    isMatchingSelectFilter({
+      selectFilter: { in: nonEmptyOptions },
+      value,
+    }) ||
+    (hasEmptyOption && value === null)
+  );
+}
+
 function evaluateSelectFilter(filter: ResolvedFilter): boolean {
   switch (filter.operand) {
     case ViewFilterOperand.IS:
-      return contains(filter.leftOperand, filter.rightOperand);
+      return isMatchingSelectedOption(
+        filter.leftOperand,
+        parseSelectFilterOptions(filter.rightOperand),
+      );
     case ViewFilterOperand.IS_NOT:
-      return !contains(filter.leftOperand, filter.rightOperand);
+      return !isMatchingSelectedOption(
+        filter.leftOperand,
+        parseSelectFilterOptions(filter.rightOperand),
+      );
     case ViewFilterOperand.IS_EMPTY:
       return !isNotEmptyTextOrArray(filter.leftOperand);
 

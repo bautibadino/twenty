@@ -3,9 +3,6 @@ import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/Enriche
 import { getImageIdentifierFieldMetadataItem } from '@/object-metadata/utils/getImageIdentifierFieldMetadataItem';
 import { getLabelIdentifierFieldMetadataItem } from '@/object-metadata/utils/getLabelIdentifierFieldMetadataItem';
 import { hasObjectMetadataItemPositionField } from '@/object-metadata/utils/hasObjectMetadataItemPositionField';
-import { generateActivityTargetGqlFields } from '@/object-record/graphql/record-gql-fields/utils/generateActivityTargetGqlFields';
-import { CoreObjectNameSingular } from 'twenty-shared/types';
-
 import { generateDepthRecordGqlFieldsFromFields } from '@/object-record/graphql/record-gql-fields/utils/generateDepthRecordGqlFieldsFromFields';
 import { visibleRecordFieldsComponentSelector } from '@/object-record/record-field/states/visibleRecordFieldsComponentSelector';
 import { currentRecordFiltersComponentState } from '@/object-record/record-filter/states/currentRecordFiltersComponentState';
@@ -17,12 +14,12 @@ import { filterDuplicatesById, isDefined } from 'twenty-shared/utils';
 
 type UseRecordsUsefulGqlFields = {
   objectMetadataItem: EnrichedObjectMetadataItem;
-  additionalFieldMetadataId?: string | null;
+  additionalFieldMetadataIds?: Array<string | null | undefined>;
 };
 
 export const useRelevantRecordsGqlFields = ({
   objectMetadataItem,
-  additionalFieldMetadataId,
+  additionalFieldMetadataIds = [],
 }: UseRecordsUsefulGqlFields) => {
   const visibleRecordFields = useAtomComponentSelectorValue(
     visibleRecordFieldsComponentSelector,
@@ -52,20 +49,23 @@ export const useRelevantRecordsGqlFields = ({
     )
     .filter(isDefined);
 
-  const additionalFieldMetadataItem = isDefined(additionalFieldMetadataId)
-    ? fieldMetadataItemByFieldMetadataItemId[additionalFieldMetadataId]
-    : undefined;
+  const additionalFieldMetadataItems = additionalFieldMetadataIds
+    .filter(isDefined)
+    .map(
+      (fieldMetadataId) =>
+        fieldMetadataItemByFieldMetadataItemId[fieldMetadataId],
+    )
+    .filter(isDefined);
 
   const fieldMetadataItemsToUse = [
     ...visibleRecordFieldMetadataItems,
     ...(recordFilterFields ?? []),
-    ...(isDefined(additionalFieldMetadataItem)
-      ? [additionalFieldMetadataItem]
-      : []),
+    ...additionalFieldMetadataItems,
   ].filter(filterDuplicatesById);
 
   const allDepthOneGqlFields = generateDepthRecordGqlFieldsFromFields({
     objectMetadataItems,
+    sourceObjectMetadataItem: objectMetadataItem,
     fields: fieldMetadataItemsToUse,
     depth: 1,
   });
@@ -76,10 +76,6 @@ export const useRelevantRecordsGqlFields = ({
     getImageIdentifierFieldMetadataItem(objectMetadataItem);
 
   const hasPosition = hasObjectMetadataItemPositionField(objectMetadataItem);
-
-  const isObjectAnActivity =
-    objectMetadataItem.nameSingular === CoreObjectNameSingular.Note ||
-    objectMetadataItem.nameSingular === CoreObjectNameSingular.Task;
 
   return {
     id: true,
@@ -94,15 +90,5 @@ export const useRelevantRecordsGqlFields = ({
     createdAt: true,
     updatedAt: true,
     deletedAt: true,
-    noteTargets: generateActivityTargetGqlFields({
-      activityObjectNameSingular: CoreObjectNameSingular.Note,
-      objectMetadataItems,
-      loadRelations: isObjectAnActivity ? 'relations' : 'activity',
-    }),
-    taskTargets: generateActivityTargetGqlFields({
-      activityObjectNameSingular: CoreObjectNameSingular.Task,
-      objectMetadataItems,
-      loadRelations: isObjectAnActivity ? 'relations' : 'activity',
-    }),
   };
 };

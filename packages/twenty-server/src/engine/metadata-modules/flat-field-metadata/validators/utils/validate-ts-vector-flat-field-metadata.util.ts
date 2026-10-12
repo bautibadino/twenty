@@ -1,14 +1,17 @@
 import { msg } from '@lingui/core/macro';
-import { isNonEmptyString } from '@sniptt/guards';
-import { type FieldMetadataType } from 'twenty-shared/types';
+import {
+  MetadataWritability,
+  type FieldMetadataType,
+} from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
 
 import { FieldMetadataExceptionCode } from 'src/engine/metadata-modules/field-metadata/field-metadata.exception';
 import { type FlatFieldMetadataTypeValidationArgs } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata-type-validator.type';
 import { type FlatFieldMetadataValidationError } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata-validation-error.type';
-import { isSafeTsVectorExpression } from 'src/engine/workspace-manager/workspace-migration/utils/remove-sql-injection.util';
 
 export const validateTsVectorFlatFieldMetadata = ({
   flatEntityToValidate,
+  update,
 }: FlatFieldMetadataTypeValidationArgs<FieldMetadataType.TS_VECTOR>): FlatFieldMetadataValidationError[] => {
   const errors: FlatFieldMetadataValidationError[] = [];
 
@@ -30,20 +33,18 @@ export const validateTsVectorFlatFieldMetadata = ({
     });
   }
 
-  const asExpression = flatEntityToValidate.universalSettings?.asExpression;
+  const isUpdateLeavingWritabilityUntouched =
+    isDefined(update) && !('writability' in update);
 
-  if (!isNonEmptyString(asExpression)) {
+  if (
+    !isUpdateLeavingWritabilityUntouched &&
+    flatEntityToValidate.writability !== MetadataWritability.SYSTEM
+  ) {
     errors.push({
       code: FieldMetadataExceptionCode.INVALID_FIELD_INPUT,
-      message:
-        'Field type TS_VECTOR must have an expression. This may have failed to be built because record identifier field does not exist or is not of a searchable type.',
-      userFriendlyMessage: msg`Field type TS_VECTOR must have an expression. This may have failed to be built because record identifier field does not exist or is not of a searchable type.`,
-    });
-  } else if (!isSafeTsVectorExpression(asExpression)) {
-    errors.push({
-      code: FieldMetadataExceptionCode.INVALID_FIELD_INPUT,
-      message: 'Field type TS_VECTOR expression is invalid',
-      userFriendlyMessage: msg`The search field expression is invalid.`,
+      message: 'Field type TS_VECTOR must have SYSTEM writability',
+      value: flatEntityToValidate.writability,
+      userFriendlyMessage: msg`Field type TS_VECTOR must have SYSTEM writability`,
     });
   }
 

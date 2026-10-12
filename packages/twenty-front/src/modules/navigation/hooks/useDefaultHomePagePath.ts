@@ -4,14 +4,18 @@ import { metadataStoreStatusFamilySelector } from '@/metadata-store/states/metad
 import { useNavigationMenuItemSectionItems } from '@/navigation-menu-item/display/hooks/useNavigationMenuItemSectionItems';
 import { type ObjectPathInfo } from '@/navigation/types/ObjectPathInfo';
 import { getFirstNavigationMenuItemLink } from '@/navigation/utils/getFirstNavigationMenuItemLink';
+import { computeObjectViewTargetIds } from '@/views/utils/computeObjectViewTargetIds';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
 import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
 import { filterReadableActiveObjectMetadataItems } from '@/object-metadata/utils/filterReadableActiveObjectMetadataItems';
 import { useObjectPermissions } from '@/object-record/hooks/useObjectPermissions';
+import { useIsMobile } from 'twenty-ui/utilities';
 import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
 import { useAtomFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilyStateValue';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { viewsSelector } from '@/views/states/selectors/viewsSelector';
+import { useIsFeatureEnabled } from '@/workspace/hooks/useIsFeatureEnabled';
+import { FeatureFlagKey } from '~/generated-metadata/graphql';
 import isEmpty from 'lodash.isempty';
 import { useCallback, useMemo } from 'react';
 import { AppPath, SettingsPath } from 'twenty-shared/types';
@@ -19,6 +23,7 @@ import { getAppPath, getSettingsPath, isDefined } from 'twenty-shared/utils';
 
 export const useDefaultHomePagePath = () => {
   const currentUser = useAtomStateValue(currentUserState);
+  const isMobile = useIsMobile();
   const { objectPermissionsByObjectMetadataId } = useObjectPermissions();
   const metadataStore = useAtomFamilyStateValue(
     metadataStoreState,
@@ -36,6 +41,9 @@ export const useDefaultHomePagePath = () => {
   const objectMetadataItems = useAtomStateValue(objectMetadataItemsSelector);
   const views = useAtomStateValue(viewsSelector);
   const navigationMenuItemsInDisplayOrder = useNavigationMenuItemSectionItems();
+  const isInitialObjectViewEnabled = useIsFeatureEnabled(
+    FeatureFlagKey.IS_INITIAL_OBJECT_VIEW_ENABLED,
+  );
 
   const readableNonSystemObjectMetadataItems = useMemo(
     () =>
@@ -48,13 +56,18 @@ export const useDefaultHomePagePath = () => {
     [activeObjectMetadataItems, objectPermissionsByObjectMetadataId],
   );
 
-  const getFirstView = useCallback(
+  const getTargetViewId = useCallback(
     (objectMetadataItemId: string | undefined | null) => {
-      return views.find(
-        (view) => view.objectMetadataId === objectMetadataItemId,
-      );
+      const { firstSelectableViewId, indexViewId, firstAvailableViewId } =
+        computeObjectViewTargetIds({
+          views,
+          objectMetadataId: objectMetadataItemId ?? undefined,
+          isInitialObjectViewEnabled,
+        });
+
+      return firstSelectableViewId ?? indexViewId ?? firstAvailableViewId;
     },
-    [views],
+    [views, isInitialObjectViewEnabled],
   );
 
   const firstNavigationMenuItemLink = useMemo(
@@ -64,12 +77,14 @@ export const useDefaultHomePagePath = () => {
         objectMetadataItems,
         views,
         objectPermissionsByObjectMetadataId,
+        isInitialObjectViewEnabled,
       }),
     [
       objectMetadataItems,
       objectPermissionsByObjectMetadataId,
       views,
       navigationMenuItemsInDisplayOrder,
+      isInitialObjectViewEnabled,
     ],
   );
 
@@ -80,34 +95,27 @@ export const useDefaultHomePagePath = () => {
       return null;
     }
 
-    const view = getFirstView(firstObjectMetadataItem.id);
+    const viewId = getTargetViewId(firstObjectMetadataItem.id);
 
-    return { objectMetadataItem: firstObjectMetadataItem, view };
-  }, [getFirstView, readableNonSystemObjectMetadataItems]);
+    return { objectMetadataItem: firstObjectMetadataItem, viewId };
+  }, [getTargetViewId, readableNonSystemObjectMetadataItems]);
 
   const defaultHomePagePath = useMemo(() => {
     if (!isDefined(currentUser)) {
       return AppPath.SignInUp;
     }
 
-    if (isEmpty(readableNonSystemObjectMetadataItems)) {
-      // Object metadata may legitimately be empty for a user with no readable
-      // objects, in which case /settings/profile is the intended fallback.
-      // It can also be transiently empty during the post-login window before
-      // workspace metadata has finished loading. Defer to AppPath.Index in
-      // that case so the user isn't stranded on /settings/profile once
-      // metadata becomes available.
-      if (!areObjectMetadataItemsLoaded) {
-        return AppPath.Index;
-      }
-      return getSettingsPath(SettingsPath.ProfilePage);
+    if (isMobile) {
+      return AppPath.Home;
     }
 
-    // The navigation menu drives the redirect and loads after the minimal-
-    // metadata fast path. Wait for it instead of falling back to the
-    // alphabetically-first object during the post-login window.
-    if (!areNavigationMenuItemsLoaded) {
+    // Both stores are empty right after login; deciding now would pick a wrong fallback.
+    if (!areObjectMetadataItemsLoaded || !areNavigationMenuItemsLoaded) {
       return AppPath.Index;
+    }
+
+    if (isEmpty(readableNonSystemObjectMetadataItems)) {
+      return getSettingsPath(SettingsPath.ProfilePage);
     }
 
     if (isDefined(firstNavigationMenuItemLink)) {
@@ -121,12 +129,13 @@ export const useDefaultHomePagePath = () => {
     return getAppPath(
       AppPath.RecordIndexPage,
       { objectNamePlural: firstObjectPathInfo.objectMetadataItem?.namePlural },
-      firstObjectPathInfo.view?.id
-        ? { viewId: firstObjectPathInfo.view.id }
+      isDefined(firstObjectPathInfo.viewId)
+        ? { viewId: firstObjectPathInfo.viewId }
         : undefined,
     );
   }, [
     currentUser,
+    isMobile,
     readableNonSystemObjectMetadataItems,
     areObjectMetadataItemsLoaded,
     areNavigationMenuItemsLoaded,

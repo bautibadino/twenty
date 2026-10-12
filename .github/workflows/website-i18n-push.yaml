@@ -11,11 +11,12 @@ on:
     branches: ['main']
     paths:
       - 'packages/twenty-website/**'
+      - '!packages/twenty-website/src/locales/**'
       - '.github/crowdin-website.yml'
       - '.github/workflows/website-i18n-push.yaml'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -81,6 +82,7 @@ jobs:
         uses: crowdin/github-action@8868a33591d21088edfc398968173a3b98d51706 # v2
         with:
           upload_sources: true
+          upload_sources_args: '--delete-obsolete'
           upload_translations: true
           download_translations: false
           localization_branch_name: i18n-website

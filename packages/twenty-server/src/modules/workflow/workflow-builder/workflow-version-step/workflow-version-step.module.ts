@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { NestjsQueryTypeOrmModule } from '@ptc-org/nestjs-query-typeorm';
-
+import { FeatureFlagModule } from 'src/engine/core-modules/feature-flag/feature-flag.module';
+import { WorkflowVersionCoreModule } from 'src/engine/core-modules/workflow/workflow-version-core.module';
 import { AiAgentRoleModule } from 'src/engine/metadata-modules/ai/ai-agent-role/ai-agent-role.module';
 import { AiAgentModule } from 'src/engine/metadata-modules/ai/ai-agent/ai-agent.module';
 import { WorkspaceManyOrAllFlatEntityMapsCacheModule } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.module';
 import { LogicFunctionModule } from 'src/engine/metadata-modules/logic-function/logic-function.module';
 import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
 import { RoleTargetEntity } from 'src/engine/metadata-modules/role-target/role-target.entity';
-import { RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
 import { provideWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/provide-workspace-scoped-repository';
 import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
 import { WorkflowCommonModule } from 'src/modules/workflow/common/workflow-common.module';
@@ -20,6 +20,7 @@ import { WorkflowVersionStepHelpersWorkspaceService } from 'src/modules/workflow
 import { WorkflowVersionStepOperationsWorkspaceService } from 'src/modules/workflow/workflow-builder/workflow-version-step/workflow-version-step-operations.workspace-service';
 import { WorkflowVersionStepUpdateWorkspaceService } from 'src/modules/workflow/workflow-builder/workflow-version-step/workflow-version-step-update.workspace-service';
 import { WorkflowVersionStepWorkspaceService } from 'src/modules/workflow/workflow-builder/workflow-version-step/workflow-version-step.workspace-service';
+import { RecordCrudModule } from 'src/engine/core-modules/record-crud/record-crud.module';
 
 @Module({
   imports: [
@@ -27,15 +28,14 @@ import { WorkflowVersionStepWorkspaceService } from 'src/modules/workflow/workfl
     LogicFunctionModule,
     WorkflowCommonModule,
     CodeStepBuildModule,
+    FeatureFlagModule,
     AiAgentRoleModule,
     AiAgentModule,
     WorkspaceCacheModule,
-    NestjsQueryTypeOrmModule.forFeature([
-      ObjectMetadataEntity,
-      RoleTargetEntity,
-      RoleEntity,
-    ]),
+    TypeOrmModule.forFeature([ObjectMetadataEntity, RoleTargetEntity]),
     WorkspaceManyOrAllFlatEntityMapsCacheModule,
+    WorkflowVersionCoreModule,
+    RecordCrudModule,
   ],
   providers: [
     WorkflowVersionStepWorkspaceService,
@@ -45,11 +45,11 @@ import { WorkflowVersionStepWorkspaceService } from 'src/modules/workflow/workfl
     WorkflowVersionStepUpdateWorkspaceService,
     WorkflowVersionStepDeletionWorkspaceService,
     provideWorkspaceScopedRepository(RoleTargetEntity),
+    provideWorkspaceScopedRepository(ObjectMetadataEntity),
   ],
   exports: [
     WorkflowVersionStepWorkspaceService,
     WorkflowVersionStepOperationsWorkspaceService,
-    WorkflowVersionStepHelpersWorkspaceService,
   ],
 })
 export class WorkflowVersionStepModule {}

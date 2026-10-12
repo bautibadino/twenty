@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { updateWorkflowVersionTrigger } from 'test/integration/graphql/suites/workflow/utils/update-workflow-version-trigger.util';
 import {
   destroyWorkflowRun,
   runWorkflowVersion,
@@ -54,30 +55,16 @@ describe('Pick Record Workflow (e2e)', () => {
     createdWorkflowVersionId =
       getWorkflowResponse.body.data.workflow.versions.edges[0].node.id;
 
-    const updateTriggerResponse = await client
-      .post('/graphql')
-      .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
-      .send({
-        query: `
-          mutation UpdateWorkflowVersion($id: UUID!, $data: WorkflowVersionUpdateInput!) {
-            updateWorkflowVersion(id: $id, data: $data) {
-              id
-            }
-          }
-        `,
-        variables: {
-          id: createdWorkflowVersionId,
-          data: {
-            trigger: {
-              name: 'Manual Trigger',
-              type: 'MANUAL',
-              settings: { outputSchema: {} },
-              nextStepIds: [],
-              position: { x: 0, y: 0 },
-            },
-          },
-        },
-      });
+    const updateTriggerResponse = await updateWorkflowVersionTrigger({
+      workflowVersionId: createdWorkflowVersionId!,
+      trigger: {
+        name: 'Manual Trigger',
+        type: 'MANUAL',
+        settings: { outputSchema: {} },
+        nextStepIds: [],
+        position: { x: 0, y: 0 },
+      },
+    });
 
     expect(updateTriggerResponse.body.errors).toBeUndefined();
 
@@ -127,29 +114,24 @@ describe('Pick Record Workflow (e2e)', () => {
     expect(pickRecordStep).toBeDefined();
     pickRecordStepId = pickRecordStep.id;
 
-    const companiesResponse = await client
-      .post('/graphql')
-      .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
-      .send({
-        query: `
-          query Companies {
-            companies(first: 2) {
-              edges {
-                node {
-                  id
-                }
+    for (const name of ['Pick Record Company A', 'Pick Record Company B']) {
+      const companyResponse = await client
+        .post('/graphql')
+        .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
+        .send({
+          query: `
+            mutation CreateCompany($name: String!) {
+              createCompany(data: { name: $name }) {
+                id
               }
             }
-          }
-        `,
-      });
+          `,
+          variables: { name },
+        });
 
-    expect(companiesResponse.body.errors).toBeUndefined();
-    candidateRecordIds = companiesResponse.body.data.companies.edges.map(
-      (edge: { node: { id: string } }) => edge.node.id,
-    );
-
-    expect(candidateRecordIds.length).toBe(2);
+      expect(companyResponse.body.errors).toBeUndefined();
+      candidateRecordIds.push(companyResponse.body.data.createCompany.id);
+    }
 
     const updateStepResponse = await client
       .post('/graphql')
@@ -213,6 +195,24 @@ describe('Pick Record Workflow (e2e)', () => {
           `,
           variables: { id: createdWorkflowId },
         });
+    }
+
+    for (const id of candidateRecordIds) {
+      const response = await client
+        .post('/graphql')
+        .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
+        .send({
+          query: `
+            mutation DestroyCompany($id: ID!) {
+              destroyCompany(id: $id) {
+                id
+              }
+            }
+          `,
+          variables: { id },
+        });
+
+      expect(response.body.errors).toBeUndefined();
     }
   });
 

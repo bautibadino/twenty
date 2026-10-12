@@ -2,9 +2,9 @@ import { type AllowedAddressSubField } from '@/types/AddressFieldsType';
 import { type FieldMetadataMultiItemSettings } from '@/types/FieldMetadataMultiItemSettings';
 import { type FieldMetadataType } from '@/types/FieldMetadataType';
 import { type IsExactly } from '@/types/IsExactly';
-import { type RelationOnDeleteAction } from '@/types/RelationOnDeleteAction.type';
+import { type RelationOnDeleteAction } from '@/types/RelationOnDeleteAction';
 import { type RelationType } from '@/types/RelationType';
-import { type SerializedRelation } from '@/types/SerializedRelation.type';
+import { type SerializedRelation } from '@/types/SerializedRelation';
 
 export enum NumberDataType {
   FLOAT = 'float',
@@ -21,6 +21,10 @@ export enum DateDisplayFormat {
 export type FieldNumberVariant = 'number' | 'percentage';
 
 export type FieldCurrencyFormat = 'short' | 'full';
+
+export const FIELD_LINKS_VARIANTS = ['url', 'domain'] as const;
+
+export type FieldLinksVariant = (typeof FIELD_LINKS_VARIANTS)[number];
 
 type FieldMetadataNumberSettings = {
   dataType?: NumberDataType;
@@ -58,13 +62,12 @@ type FieldMetadataAddressSettings = {
   subFields?: AllowedAddressSubField[];
 };
 
-type FieldMetadataFilesSettings = {
-  maxNumberOfValues: number;
+type FieldMetadataLinksSettings = FieldMetadataMultiItemSettings & {
+  type?: FieldLinksVariant;
 };
 
-type FieldMetadataTsVectorSettings = {
-  asExpression?: string;
-  generatedType?: 'STORED' | 'VIRTUAL';
+type FieldMetadataFilesSettings = {
+  maxNumberOfValues: number;
 };
 
 export type FieldMetadataSettingsMapping = {
@@ -76,10 +79,10 @@ export type FieldMetadataSettingsMapping = {
   [FieldMetadataType.RELATION]: FieldMetadataRelationSettings;
   [FieldMetadataType.ADDRESS]: FieldMetadataAddressSettings | null;
   [FieldMetadataType.MORPH_RELATION]: FieldMetadataRelationSettings;
-  [FieldMetadataType.TS_VECTOR]: FieldMetadataTsVectorSettings | null;
+  [FieldMetadataType.TS_VECTOR]: null;
   [FieldMetadataType.PHONES]: FieldMetadataMultiItemSettings | null;
   [FieldMetadataType.EMAILS]: FieldMetadataMultiItemSettings | null;
-  [FieldMetadataType.LINKS]: FieldMetadataMultiItemSettings | null;
+  [FieldMetadataType.LINKS]: FieldMetadataLinksSettings | null;
   [FieldMetadataType.ARRAY]: FieldMetadataMultiItemSettings | null;
   [FieldMetadataType.FILES]: FieldMetadataFilesSettings;
 };

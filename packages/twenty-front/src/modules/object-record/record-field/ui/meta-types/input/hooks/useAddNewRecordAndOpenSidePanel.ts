@@ -5,14 +5,12 @@ import { useOpenRecordInSidePanel } from '@/side-panel/hooks/useOpenRecordInSide
 import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
 import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
 import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { useBuildRecordInputFromRLSPredicates } from '@/object-record/hooks/useBuildRecordInputFromRLSPredicates';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
 import { useObjectPermissionsForObject } from '@/object-record/hooks/useObjectPermissionsForObject';
 import { canCreateRecordsForObjectMetadataItem } from '@/object-record/utils/canCreateRecordsForObjectMetadataItem';
 
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
-import { viewableRecordIdState } from '@/object-record/record-side-panel/states/viewableRecordIdState';
-import { viewableRecordNameSingularState } from '@/object-record/record-side-panel/states/viewableRecordNameSingularState';
-import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
 import { buildRecordLabelPayload } from '@/object-record/utils/buildRecordLabelPayload';
 import { getOperationName } from '~/utils/getOperationName';
 import {
@@ -38,16 +36,16 @@ export const useAddNewRecordAndOpenSidePanel = ({
   relationFieldMetadataItem,
   recordId,
 }: useAddNewRecordAndOpenSidePanelProps) => {
-  const setViewableRecordId = useSetAtomState(viewableRecordIdState);
-  const setViewableRecordNameSingular = useSetAtomState(
-    viewableRecordNameSingularState,
-  );
-
   const { createOneRecord } = useCreateOneRecord({
     objectNameSingular: relationObjectMetadataNameSingular,
   });
 
   const { updateOneRecord } = useUpdateOneRecord();
+
+  const { buildRecordInputFromRLSPredicates } =
+    useBuildRecordInputFromRLSPredicates({
+      objectMetadataItem: relationObjectMetadataItem,
+    });
 
   const { openRecordInSidePanel } = useOpenRecordInSidePanel();
 
@@ -75,11 +73,14 @@ export const useAddNewRecordAndOpenSidePanel = ({
     createNewRecordAndOpenSidePanel: async (searchInput?: string) => {
       const newRecordId = v4();
 
-      const createRecordPayload = buildRecordLabelPayload({
-        id: newRecordId,
-        searchInput,
-        objectMetadataItem: relationObjectMetadataItem,
-      });
+      const createRecordPayload = {
+        ...buildRecordInputFromRLSPredicates(),
+        ...buildRecordLabelPayload({
+          id: newRecordId,
+          searchInput,
+          objectMetadataItem: relationObjectMetadataItem,
+        }),
+      };
 
       if (relationFieldMetadataItemRelationType === RelationType.MANY_TO_ONE) {
         const gqlField =
@@ -107,9 +108,6 @@ export const useAddNewRecordAndOpenSidePanel = ({
           },
         });
       }
-
-      setViewableRecordId(newRecordId);
-      setViewableRecordNameSingular(relationObjectMetadataNameSingular);
 
       apolloCoreClient.refetchQueries({
         include: [getOperationName(SEARCH_QUERY) ?? ''],

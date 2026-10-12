@@ -1,4 +1,5 @@
 import { isDefined } from 'class-validator';
+import { DEFAULT_VIEW_GROUP_LOAD_LIMIT } from 'twenty-shared/constants';
 import { STANDARD_OBJECTS } from 'twenty-shared/metadata';
 import {
   type AggregateOperations,
@@ -29,6 +30,7 @@ export type CreateStandardViewOptions<O extends AllStandardObjectName> = {
   kanbanAggregateOperationFieldName?: AllStandardObjectFieldName<O>;
   mainGroupByFieldName?: AllStandardObjectFieldName<O>;
   calendarFieldName?: AllStandardObjectFieldName<O>;
+  calendarEndFieldName?: AllStandardObjectFieldName<O>;
 };
 
 export type CreateStandardViewArgs<
@@ -57,6 +59,7 @@ export const createStandardViewFlatMetadata = <
     kanbanAggregateOperationFieldName,
     mainGroupByFieldName,
     calendarFieldName,
+    calendarEndFieldName,
   },
   standardObjectMetadataRelatedEntityIds,
   twentyStandardApplicationId,
@@ -95,6 +98,12 @@ export const createStandardViewFlatMetadata = <
       ].id
     : null;
 
+  const calendarEndFieldMetadataId = calendarEndFieldName
+    ? standardObjectMetadataRelatedEntityIds[objectName].fields[
+        calendarEndFieldName
+      ].id
+    : null;
+
   const kanbanAggregateOperationFieldMetadataUniversalIdentifier =
     kanbanAggregateOperationFieldName
       ? // @ts-expect-error ignore
@@ -113,8 +122,15 @@ export const createStandardViewFlatMetadata = <
       STANDARD_OBJECTS[objectName].fields[calendarFieldName].universalIdentifier
     : null;
 
+  const calendarEndFieldMetadataUniversalIdentifier = calendarEndFieldName
+    ? // @ts-expect-error ignore
+      STANDARD_OBJECTS[objectName].fields[calendarEndFieldName]
+        .universalIdentifier
+    : null;
+
   return {
     calendarFieldMetadataUniversalIdentifier,
+    calendarEndFieldMetadataUniversalIdentifier,
     kanbanAggregateOperationFieldMetadataUniversalIdentifier,
     mainGroupByFieldMetadataUniversalIdentifier,
     objectMetadataUniversalIdentifier,
@@ -138,8 +154,10 @@ export const createStandardViewFlatMetadata = <
     mainGroupByFieldMetadataId,
     shouldHideEmptyGroups: false,
     kanbanColumnWidth: null,
+    groupLoadLimit: DEFAULT_VIEW_GROUP_LOAD_LIMIT,
     calendarLayout: null,
     calendarFieldMetadataId,
+    calendarEndFieldMetadataId,
     anyFieldFilterValue: null,
     visibility: ViewVisibility.WORKSPACE,
     createdByUserWorkspaceId: null,
@@ -158,7 +176,9 @@ export const createStandardViewFlatMetadata = <
     viewGroupUniversalIdentifiers: [],
     viewFilterGroupIds: [],
     viewFilterGroupUniversalIdentifiers: [],
+    navigationMenuItemIds: [],
     viewSortIds: [],
+    navigationMenuItemUniversalIdentifiers: [],
     viewSortUniversalIdentifiers: [],
     createdAt: now,
     updatedAt: now,

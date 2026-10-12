@@ -1,11 +1,13 @@
+import { useLingui } from '@lingui/react/macro';
 import { useFieldFocus } from '@/object-record/record-field/ui/hooks/useFieldFocus';
 import { useMultiSelectFieldDisplay } from '@/object-record/record-field/ui/meta-types/hooks/useMultiSelectFieldDisplay';
-import { MultiSelectDisplay } from '@/ui/field/display/components/MultiSelectDisplay';
-import { ExpandableList } from '@/ui/layout/expandable-list/components/ExpandableList';
-import { Tag } from 'twenty-ui/data-display';
+import { OverflowingList } from 'twenty-ui/components/layout';
+import { Tag } from 'twenty-ui/primitives/data-display';
 import { isDefined } from 'twenty-shared/utils';
 
 export const MultiSelectFieldDisplay = () => {
+  const { t } = useLingui();
+
   const { fieldValue, fieldDefinition } = useMultiSelectFieldDisplay();
 
   const { isFocused } = useFieldFocus();
@@ -18,20 +20,16 @@ export const MultiSelectFieldDisplay = () => {
 
   if (!isDefined(selectedOptions)) return null;
 
-  return isFocused ? (
-    <ExpandableList isChipCountDisplayed={isFocused}>
+  return (
+    <OverflowingList
+      overflowLabel={t`Show all items`}
+      showOverflowCount={isFocused}
+    >
       {selectedOptions.map((selectedOption, index) => (
-        <Tag
-          key={index}
-          color={selectedOption.color}
-          text={selectedOption.label}
-        />
+        <Tag key={index} color={selectedOption.color}>
+          {selectedOption.label}
+        </Tag>
       ))}
-    </ExpandableList>
-  ) : (
-    <MultiSelectDisplay
-      values={fieldValue}
-      options={fieldDefinition.metadata.options}
-    />
+    </OverflowingList>
   );
 };

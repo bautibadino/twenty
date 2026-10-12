@@ -1,16 +1,26 @@
 import { Injectable } from '@nestjs/common';
 
 import { type ToolSet } from 'ai';
+import { type FieldMetadataType } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
 import { z } from 'zod';
 
+import { METADATA_TOOL_EXCLUDED_FIELD_NAMES } from 'src/engine/core-modules/tool-provider/constants/metadata-tool-excluded-field-names.constant';
 import { compactMetadataOutput } from 'src/engine/core-modules/tool-provider/utils/compact-metadata-output.util';
-import { formatValidationErrors } from 'src/engine/core-modules/tool-provider/utils/format-validation-errors.util';
+import { normalizeIconName } from 'src/engine/core-modules/tool-provider/utils/normalize-icon-name.util';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
 import { fromFlatObjectMetadataToObjectMetadataDto } from 'src/engine/metadata-modules/flat-object-metadata/utils/from-flat-object-metadata-to-object-metadata-dto.util';
 import { ObjectMetadataService } from 'src/engine/metadata-modules/object-metadata/object-metadata.service';
-import { WorkspaceMigrationBuilderException } from 'src/engine/workspace-manager/workspace-migration/exceptions/workspace-migration-builder-exception';
+
+type InlinedObjectFieldSummary = {
+  id: string;
+  name: string;
+  type: FieldMetadataType;
+  label: string;
+};
 
 const OBJECT_STRIP_WHEN_NULLISH = [
-  'standardOverrides',
+  'overrides',
   'color',
   'duplicateCriteria',
   'shortcut',
@@ -20,11 +30,19 @@ const OBJECT_STRIP_WHEN_NULLISH = [
 ];
 
 const GetObjectMetadataInputSchema = z.object({
-  id: z
+  id: z.uuid().optional().describe('Object ID. Returns one object if set.'),
+  objectName: z
     .string()
-    .uuid()
     .optional()
-    .describe('Object ID. Returns one object if set.'),
+    .describe(
+      'Filter by object name, singular or plural (e.g. "opportunity" or "opportunities"). Lets you locate an object by name in one call without scanning the full list.',
+    ),
+  includeFields: z
+    .boolean()
+    .default(false)
+    .describe(
+      'When true, each returned object includes its fields as a compact array of {id, name, type, label}. Use this to fetch an object and all the field ids you need in a single call (e.g. before building a dashboard) instead of a separate get_field_metadata call.',
+    ),
   includeFullSystemObjects: z
     .boolean()
     .default(false)
@@ -46,7 +64,12 @@ const CreateObjectMetadataInputSchema = z.object({
   labelSingular: z.string().describe('Singular label (e.g. "Company")'),
   labelPlural: z.string().describe('Plural label (e.g. "Companies")'),
   description: z.string().optional().describe('Description'),
-  icon: z.string().optional().describe('Icon name'),
+  icon: z
+    .string()
+    .optional()
+    .describe(
+      'Tabler icon name, PascalCase with "Icon" prefix (e.g. IconBuildingSkyscraper, IconPaw, IconTargetArrow). Always set one matching what the object represents.',
+    ),
   shortcut: z.string().optional().describe('Keyboard shortcut'),
   isRemote: z.boolean().optional().describe('Remote object'),
   isLabelSyncedWithName: z
@@ -62,7 +85,10 @@ const UpdateObjectMetadataInputSchema = z.object({
   nameSingular: z.string().optional().describe('Singular name'),
   namePlural: z.string().optional().describe('Plural name'),
   description: z.string().optional().describe('Description'),
-  icon: z.string().optional().describe('Icon name'),
+  icon: z
+    .string()
+    .optional()
+    .describe('Tabler icon name (e.g. IconBuildingSkyscraper)'),
   shortcut: z.string().optional().describe('Keyboard shortcut'),
   isActive: z.boolean().optional().describe('Active state'),
   labelIdentifierFieldMetadataId: z
@@ -103,16 +129,59 @@ const UpdateManyObjectMetadataInputSchema = z.object({
 
 @Injectable()
 export class ObjectMetadataToolsFactory {
-  constructor(private readonly objectMetadataService: ObjectMetadataService) {}
+  constructor(
+    private readonly objectMetadataService: ObjectMetadataService,
+    private readonly flatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
+  ) {}
+
+  private async buildFieldsByObjectId(
+    workspaceId: string,
+  ): Promise<Map<string, InlinedObjectFieldSummary[]>> {
+    const { flatFieldMetadataMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatFieldMetadataMaps'],
+        },
+      );
+
+    const fieldsByObjectId = new Map<string, InlinedObjectFieldSummary[]>();
+
+    for (const fieldMetadata of Object.values(
+      flatFieldMetadataMaps.byUniversalIdentifier,
+    )) {
+      if (
+        !isDefined(fieldMetadata) ||
+        METADATA_TOOL_EXCLUDED_FIELD_NAMES.has(fieldMetadata.name)
+      ) {
+        continue;
+      }
+
+      const existing =
+        fieldsByObjectId.get(fieldMetadata.objectMetadataId) ?? [];
+
+      existing.push({
+        id: fieldMetadata.id,
+        name: fieldMetadata.name,
+        type: fieldMetadata.type,
+        label: fieldMetadata.label ?? fieldMetadata.name,
+      });
+      fieldsByObjectId.set(fieldMetadata.objectMetadataId, existing);
+    }
+
+    return fieldsByObjectId;
+  }
 
   generateTools(workspaceId: string): ToolSet {
     return {
       get_object_metadata: {
         description:
-          "List object metadata as an array. System objects are returned as compact {id, nameSingular, namePlural} — enough to locate an object by name and read its id. Keep includeFullSystemObjects at its default (false); only set it true when you specifically need a system object's full configuration.",
+          "List object metadata as an array. Filter to a single object by id or objectName (singular or plural). Set includeFields to also return each object's fields ({id, name, type, label}) — enough to build a dashboard or view without a separate get_field_metadata call. System objects are otherwise returned as compact {id, nameSingular, namePlural}. Keep includeFullSystemObjects at its default (false); only set it true when you specifically need a system object's full configuration.",
         inputSchema: GetObjectMetadataInputSchema,
         execute: async (parameters: {
           id?: string;
+          objectName?: string;
+          includeFields?: boolean;
           includeFullSystemObjects?: boolean;
           limit?: number;
         }) => {
@@ -120,25 +189,44 @@ export class ObjectMetadataToolsFactory {
             await this.objectMetadataService.findManyWithinWorkspace(
               workspaceId,
               {
-                ...(parameters.id ? { where: { id: parameters.id } } : {}),
+                ...(parameters.id
+                  ? { where: { id: parameters.id } }
+                  : parameters.objectName
+                    ? {
+                        where: [
+                          { nameSingular: parameters.objectName },
+                          { namePlural: parameters.objectName },
+                        ],
+                      }
+                    : {}),
                 take: parameters.limit ?? 100,
               },
             );
 
+          const fieldsByObjectId = parameters.includeFields
+            ? await this.buildFieldsByObjectId(workspaceId)
+            : undefined;
+
           return flatObjectMetadatas.map((flatObjectMetadata) => {
             const dto =
               fromFlatObjectMetadataToObjectMetadataDto(flatObjectMetadata);
+
+            const fields = fieldsByObjectId?.get(dto.id) ?? [];
 
             if (dto.isSystem && !parameters.includeFullSystemObjects) {
               return {
                 id: dto.id,
                 nameSingular: dto.nameSingular,
                 namePlural: dto.namePlural,
+                ...(parameters.includeFields ? { fields } : {}),
               };
             }
 
             return compactMetadataOutput(
-              { ...dto },
+              {
+                ...dto,
+                ...(parameters.includeFields ? { fields } : {}),
+              },
               { stripWhenNullish: OBJECT_STRIP_WHEN_NULLISH },
             );
           });
@@ -158,26 +246,24 @@ export class ObjectMetadataToolsFactory {
           isRemote?: boolean;
           isLabelSyncedWithName?: boolean;
         }) => {
-          try {
-            const flatObjectMetadata =
-              await this.objectMetadataService.createOneObject({
-                createObjectInput: parameters as Parameters<
-                  typeof this.objectMetadataService.createOneObject
-                >[0]['createObjectInput'],
-                workspaceId,
-              });
+          const { icon, ...createObjectInput } = parameters;
 
-            return {
-              id: flatObjectMetadata.id,
-              nameSingular: flatObjectMetadata.nameSingular,
-              labelSingular: flatObjectMetadata.labelSingular,
-            };
-          } catch (error) {
-            if (error instanceof WorkspaceMigrationBuilderException) {
-              throw new Error(formatValidationErrors(error));
-            }
-            throw error;
-          }
+          const flatObjectMetadata =
+            await this.objectMetadataService.createOneObject({
+              createObjectInput: {
+                ...createObjectInput,
+                icon: normalizeIconName(icon),
+              } as Parameters<
+                typeof this.objectMetadataService.createOneObject
+              >[0]['createObjectInput'],
+              workspaceId,
+            });
+
+          return {
+            id: flatObjectMetadata.id,
+            nameSingular: flatObjectMetadata.nameSingular,
+            labelSingular: flatObjectMetadata.labelSingular,
+          };
         },
       },
       update_object_metadata: {
@@ -198,46 +284,41 @@ export class ObjectMetadataToolsFactory {
           imageIdentifierFieldMetadataId?: string;
           isLabelSyncedWithName?: boolean;
         }) => {
-          try {
-            const { id, ...update } = parameters;
+          const { id, icon, ...update } = parameters;
+          const normalizedIcon = normalizeIconName(icon);
 
-            const flatObjectMetadata =
-              await this.objectMetadataService.updateOneObject({
-                updateObjectInput: { id, update },
-                workspaceId,
-              });
+          const flatObjectMetadata =
+            await this.objectMetadataService.updateOneObject({
+              updateObjectInput: {
+                id,
+                update: {
+                  ...update,
+                  ...(isDefined(normalizedIcon)
+                    ? { icon: normalizedIcon }
+                    : {}),
+                },
+              },
+              workspaceId,
+            });
 
-            return {
-              id: flatObjectMetadata.id,
-              nameSingular: flatObjectMetadata.nameSingular,
-              labelSingular: flatObjectMetadata.labelSingular,
-            };
-          } catch (error) {
-            if (error instanceof WorkspaceMigrationBuilderException) {
-              throw new Error(formatValidationErrors(error));
-            }
-            throw error;
-          }
+          return {
+            id: flatObjectMetadata.id,
+            nameSingular: flatObjectMetadata.nameSingular,
+            labelSingular: flatObjectMetadata.labelSingular,
+          };
         },
       },
       delete_object_metadata: {
         description: 'Delete an object by ID. Also deletes associated fields.',
         inputSchema: DeleteObjectMetadataInputSchema,
         execute: async (parameters: { id: string }) => {
-          try {
-            const flatObjectMetadata =
-              await this.objectMetadataService.deleteOneObject({
-                deleteObjectInput: { id: parameters.id },
-                workspaceId,
-              });
+          const flatObjectMetadata =
+            await this.objectMetadataService.deleteOneObject({
+              deleteObjectInput: { id: parameters.id },
+              workspaceId,
+            });
 
-            return { id: flatObjectMetadata.id, success: true };
-          } catch (error) {
-            if (error instanceof WorkspaceMigrationBuilderException) {
-              throw new Error(formatValidationErrors(error));
-            }
-            throw error;
-          }
+          return { id: flatObjectMetadata.id, success: true };
         },
       },
       create_many_object_metadata: {
@@ -257,30 +338,26 @@ export class ObjectMetadataToolsFactory {
             isLabelSyncedWithName?: boolean;
           }>;
         }) => {
-          try {
-            await Promise.all(
-              parameters.objects.map(async (createObjectInput) => {
-                await this.objectMetadataService.createOneObject({
-                  createObjectInput: createObjectInput as Parameters<
-                    typeof this.objectMetadataService.createOneObject
-                  >[0]['createObjectInput'],
-                  workspaceId,
-                });
-              }),
-            );
+          await Promise.all(
+            parameters.objects.map(async ({ icon, ...createObjectInput }) => {
+              await this.objectMetadataService.createOneObject({
+                createObjectInput: {
+                  ...createObjectInput,
+                  icon: normalizeIconName(icon),
+                } as Parameters<
+                  typeof this.objectMetadataService.createOneObject
+                >[0]['createObjectInput'],
+                workspaceId,
+              });
+            }),
+          );
 
-            return true;
-          } catch (error) {
-            if (error instanceof WorkspaceMigrationBuilderException) {
-              throw new Error(formatValidationErrors(error));
-            }
-            throw error;
-          }
+          return true;
         },
       },
       update_many_object_metadata: {
         description:
-          'Update multiple objects at once. Batch version of update_object_metadata.',
+          'Update multiple objects at once. Batch version of update_object_metadata. Applies the whole batch in one migration, so a rename (nameSingular or namePlural) or a labelIdentifierFieldMetadataId change cannot share a batch with another object: send each of those as its own call.',
         inputSchema: UpdateManyObjectMetadataInputSchema,
         execute: async (parameters: {
           objects: Array<{
@@ -298,23 +375,26 @@ export class ObjectMetadataToolsFactory {
             isLabelSyncedWithName?: boolean;
           }>;
         }) => {
-          try {
-            await Promise.all(
-              parameters.objects.map(async ({ id, ...update }) => {
-                await this.objectMetadataService.updateOneObject({
-                  updateObjectInput: { id, update },
-                  workspaceId,
-                });
-              }),
-            );
+          await this.objectMetadataService.updateManyObjects({
+            updateObjectInputs: parameters.objects.map(
+              ({ id, icon, ...update }) => {
+                const normalizedIcon = normalizeIconName(icon);
 
-            return true;
-          } catch (error) {
-            if (error instanceof WorkspaceMigrationBuilderException) {
-              throw new Error(formatValidationErrors(error));
-            }
-            throw error;
-          }
+                return {
+                  id,
+                  update: {
+                    ...update,
+                    ...(isDefined(normalizedIcon)
+                      ? { icon: normalizedIcon }
+                      : {}),
+                  },
+                };
+              },
+            ),
+            workspaceId,
+          });
+
+          return true;
         },
       },
     };

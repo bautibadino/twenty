@@ -1,5 +1,6 @@
 import { type ActorMetadata } from 'twenty-shared/types';
 
+import { type WorkflowStatus } from 'src/engine/core-modules/workflow/enums/workflow-status.enum';
 import { BaseWorkspaceEntity } from 'src/engine/twenty-orm/base.workspace-entity';
 import { type EntityRelation } from 'src/engine/workspace-manager/workspace-migration/types/entity-relation.interface';
 import { type AttachmentWorkspaceEntity } from 'src/modules/attachment/standard-objects/attachment.workspace-entity';
@@ -8,15 +9,10 @@ import { type WorkflowAutomatedTriggerWorkspaceEntity } from 'src/modules/workfl
 import { type WorkflowRunWorkspaceEntity } from 'src/modules/workflow/common/standard-objects/workflow-run.workspace-entity';
 import { type WorkflowVersionWorkspaceEntity } from 'src/modules/workflow/common/standard-objects/workflow-version.workspace-entity';
 
-export enum WorkflowStatus {
-  DRAFT = 'DRAFT',
-  ACTIVE = 'ACTIVE',
-  DEACTIVATED = 'DEACTIVATED',
-}
-
 export class WorkflowWorkspaceEntity extends BaseWorkspaceEntity {
   name: string | null;
   lastPublishedVersionId: string | null;
+  coreWorkflowId: string | null;
   statuses: WorkflowStatus[] | null;
   position: number;
   searchVector: string;

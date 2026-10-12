@@ -1,3 +1,4 @@
+import { EmailOperation } from 'twenty-shared/types';
 import { Injectable, Logger } from '@nestjs/common';
 
 import { EmailComposerService } from 'src/engine/core-modules/tool/tools/email-tool/email-composer.service';
@@ -28,10 +29,11 @@ export class SendEmailTool implements Tool {
     context: ToolExecutionContext,
   ): Promise<ToolOutput> {
     try {
-      const result = await this.emailComposerService.composeEmail(
+      const result = await this.emailComposerService.composeEmail({
         parameters,
         context,
-      );
+        operation: EmailOperation.SEND,
+      });
 
       if (!result.success) {
         return result.output;
@@ -41,13 +43,13 @@ export class SendEmailTool implements Tool {
 
       const sendResult = await this.sendEmailService.sendComposedEmail(data);
 
-      if (data.shouldPersistMessage) {
-        await this.sendEmailService.persistSentMessage(
-          sendResult,
-          data,
-          context.workspaceId,
-        );
-      }
+      const persistedMessage = data.shouldPersistMessage
+        ? await this.sendEmailService.persistSentMessage(
+            sendResult,
+            data,
+            context.workspaceId,
+          )
+        : undefined;
 
       this.logger.log(
         `Email sent successfully to ${data.toRecipientsDisplay}${data.attachments.length > 0 ? ` with ${data.attachments.length} attachments` : ''}`,
@@ -65,6 +67,10 @@ export class SendEmailTool implements Tool {
           plainTextBody: data.plainTextBody,
           connectedAccountId: data.connectedAccount.id,
           attachmentCount: data.attachments.length,
+          headerMessageId: sendResult.headerMessageId,
+          threadExternalId: sendResult.threadExternalId,
+          messageId: persistedMessage?.messageId,
+          messageThreadId: persistedMessage?.messageThreadId,
         },
       };
     } catch (error) {

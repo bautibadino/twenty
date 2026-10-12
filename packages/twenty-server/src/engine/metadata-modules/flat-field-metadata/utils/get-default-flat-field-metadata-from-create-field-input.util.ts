@@ -1,10 +1,11 @@
+import { MetadataWritability } from 'twenty-shared/types';
 import {
   extractAndSanitizeObjectStringFields,
   isDefined,
 } from 'twenty-shared/utils';
 import { v4 } from 'uuid';
 
-import { type FlatApplication } from 'src/engine/core-modules/application/types/flat-application.type';
+import { isAuditLoggableFieldType } from 'src/engine/metadata-modules/field-metadata/utils/is-audit-loggable-field-type.util';
 import { type CreateFieldInput } from 'src/engine/metadata-modules/field-metadata/dtos/create-field.input';
 import { generateDefaultValue } from 'src/engine/metadata-modules/field-metadata/utils/generate-default-value';
 import { generateNullable } from 'src/engine/metadata-modules/field-metadata/utils/generate-nullable';
@@ -14,13 +15,15 @@ import { type UniversalFlatFieldMetadata } from 'src/engine/workspace-manager/wo
 
 type GetDefaultFlatFieldMetadataArgs = {
   createFieldInput: Omit<CreateFieldInput, 'workspaceId' | 'objectMetadataId'>;
-  flatApplication: FlatApplication;
+  applicationUniversalIdentifier: string;
   objectMetadataUniversalIdentifier: string;
+  isSystemSideEffect?: boolean;
 };
 export const getDefaultFlatFieldMetadata = ({
   createFieldInput,
-  flatApplication,
+  applicationUniversalIdentifier,
   objectMetadataUniversalIdentifier,
+  isSystemSideEffect = false,
 }: GetDefaultFlatFieldMetadataArgs) => {
   const { defaultValue, settings } = extractAndSanitizeObjectStringFields(
     createFieldInput,
@@ -41,11 +44,15 @@ export const getDefaultFlatFieldMetadata = ({
       createFieldInput.isRemoteCreation,
     ),
     isSystem: createFieldInput.isSystem ?? false,
-    isSystemSideEffect: false,
+    isSystemSideEffect,
     isUnique: createFieldInput.isUnique ?? false,
+    isSearchable: createFieldInput.isSearchable ?? false,
+    isAuditLogged:
+      createFieldInput.isAuditLogged ??
+      isAuditLoggableFieldType(createFieldInput.type),
     label: createFieldInput.label,
     name: createFieldInput.name,
-    standardOverrides: null,
+    overrides: null,
     type: createFieldInput.type,
     universalIdentifier: createFieldInput.universalIdentifier ?? v4(),
     options: createFieldInput.options ?? null,
@@ -57,15 +64,15 @@ export const getDefaultFlatFieldMetadata = ({
       : resolvedDefaultValue,
     createdAt,
     updatedAt: createdAt,
-    // isUIReadOnly is the deprecated alias of isUIEditable (inverted
-    // polarity), kept for one release; isUIEditable wins when both are set.
+    // isUIReadOnly is the deprecated inverted alias; isUIEditable wins when both are set
     isUIEditable:
       createFieldInput.isUIEditable ??
       (isDefined(createFieldInput.isUIReadOnly)
         ? !createFieldInput.isUIReadOnly
         : true),
+    writability: MetadataWritability.OPEN,
     morphId: null,
-    applicationUniversalIdentifier: flatApplication.universalIdentifier,
+    applicationUniversalIdentifier,
     objectMetadataUniversalIdentifier,
     relationTargetObjectMetadataUniversalIdentifier: null,
     relationTargetFieldMetadataUniversalIdentifier: null,
@@ -74,8 +81,10 @@ export const getDefaultFlatFieldMetadata = ({
     fieldPermissionUniversalIdentifiers: [],
     kanbanAggregateOperationViewUniversalIdentifiers: [],
     calendarViewUniversalIdentifiers: [],
+    calendarEndViewUniversalIdentifiers: [],
     mainGroupByFieldMetadataViewUniversalIdentifiers: [],
     universalSettings: settings ?? null,
     viewSortUniversalIdentifiers: [],
+    searchFieldMetadataUniversalIdentifiers: [],
   } as const satisfies UniversalFlatFieldMetadata;
 };

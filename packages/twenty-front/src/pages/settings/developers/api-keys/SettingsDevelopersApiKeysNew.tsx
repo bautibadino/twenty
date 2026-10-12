@@ -16,22 +16,24 @@ import { useStore } from 'jotai';
 import { Key } from 'ts-key-enum';
 import { SettingsPath } from 'twenty-shared/types';
 import { getSettingsPath, isDefined } from 'twenty-shared/utils';
-import { H2Title } from 'twenty-ui/typography';
-import { Section } from 'twenty-ui/layout';
 import {
   CreateApiKeyDocument,
   GenerateApiKeyTokenDocument,
+  GetApiKeyRolesDocument,
   GetApiKeysDocument,
-  GetRolesDocument,
 } from '~/generated-metadata/graphql';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
+import { SETTINGS_API_WEBHOOKS_TABS } from '@/settings/developers/constants/SettingsApiWebhooksTabs';
+import { Section } from 'twenty-ui/components/layout';
 
 export const SettingsDevelopersApiKeysNew = () => {
   const { t } = useLingui();
   const [generateOneApiKeyToken] = useMutation(GenerateApiKeyTokenDocument);
   const navigateSettings = useNavigateSettings();
-  const { data: rolesData, loading: rolesLoading } = useQuery(GetRolesDocument);
-  const roles = rolesData?.getRoles ?? [];
+  const { data: rolesData, loading: rolesLoading } = useQuery(
+    GetApiKeyRolesDocument,
+  );
+  const roles = rolesData?.getApiKeyRoles ?? [];
 
   const [formValues, setFormValues] = useState<{
     name: string;
@@ -44,8 +46,8 @@ export const SettingsDevelopersApiKeysNew = () => {
   });
 
   useEffect(() => {
-    if (isDefined(rolesData?.getRoles)) {
-      const apiKeyAssignableRoles = rolesData.getRoles.filter(
+    if (isDefined(rolesData?.getApiKeyRoles)) {
+      const apiKeyAssignableRoles = rolesData.getApiKeyRoles.filter(
         (role) => role.canBeAssignedToApiKeys,
       );
       if (apiKeyAssignableRoles.length > 0) {
@@ -136,8 +138,13 @@ export const SettingsDevelopersApiKeysNew = () => {
           href: getSettingsPath(SettingsPath.General),
         },
         {
-          children: t`APIs & Webhooks`,
-          href: getSettingsPath(SettingsPath.ApiWebhooks),
+          children: t`MCP & APIs`,
+          href: getSettingsPath(
+            SettingsPath.ApiWebhooks,
+            undefined,
+            undefined,
+            SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.API,
+          ),
         },
         { children: t`New Key` },
       ]}
@@ -145,15 +152,24 @@ export const SettingsDevelopersApiKeysNew = () => {
         <SaveAndCancelButtons
           isSaveDisabled={!canSave}
           onCancel={() => {
-            navigateSettings(SettingsPath.ApiWebhooks);
+            navigateSettings(
+              SettingsPath.ApiWebhooks,
+              undefined,
+              undefined,
+              undefined,
+              SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.API,
+            );
           }}
           onSave={handleSave}
         />
       }
     >
       <SettingsPageContainer>
-        <Section>
-          <H2Title title={t`Name`} description={t`Name of your API key`} />
+        <Section.Root>
+          <Section.Header
+            title={t`Name`}
+            description={t`Name of your API key`}
+          />
           <SettingsTextInput
             instanceId="api-key-new-name"
             placeholder={t`E.g. backoffice integration`}
@@ -174,9 +190,9 @@ export const SettingsDevelopersApiKeysNew = () => {
             }}
             fullWidth
           />
-        </Section>
-        <Section>
-          <H2Title
+        </Section.Root>
+        <Section.Root>
+          <Section.Header
             title={t`Role`}
             description={t`What this API can do: Select a user role to define its permissions.`}
           />
@@ -190,9 +206,9 @@ export const SettingsDevelopersApiKeysNew = () => {
             }}
             roles={roles}
           />
-        </Section>
-        <Section>
-          <H2Title
+        </Section.Root>
+        <Section.Root>
+          <Section.Header
             title={t`Expiration Date`}
             description={t`When the API key will expire.`}
           />
@@ -207,7 +223,7 @@ export const SettingsDevelopersApiKeysNew = () => {
               }));
             }}
           />
-        </Section>
+        </Section.Root>
       </SettingsPageContainer>
     </SettingsPageLayout>
   );

@@ -1,3 +1,6 @@
+import { ListItemButton } from 'twenty-ui/components/navigation';
+import { ListItem } from 'twenty-ui/primitives/navigation';
+import { SelectOptionIcon } from '@/ui/input/components/SelectOptionIcon';
 import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
 import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
 import { ChartGroupByFieldSelectionTargetObjectFieldsView } from '@/side-panel/pages/page-layout/components/dropdown-content/ChartGroupByFieldSelectionTargetObjectFieldsView';
@@ -15,7 +18,6 @@ import { t } from '@lingui/core/macro';
 import { useMemo, useState } from 'react';
 import { isDefined } from 'twenty-shared/utils';
 import { IconChevronLeft, useIcons } from 'twenty-ui/icon';
-import { MenuItem } from 'twenty-ui/navigation';
 import { RelationType } from '~/generated-metadata/graphql';
 
 type MorphRelationTarget = {
@@ -34,6 +36,7 @@ type ChartGroupByFieldSelectionMorphRelationFieldViewProps = {
     perTargetFieldId: string;
     subFieldName: string;
   }) => void;
+  onSelectTargetRecord: (params: { perTargetFieldId: string }) => void;
 };
 
 export const ChartGroupByFieldSelectionMorphRelationFieldView = ({
@@ -42,6 +45,7 @@ export const ChartGroupByFieldSelectionMorphRelationFieldView = ({
   currentSubFieldName,
   onBack,
   onSelectTargetSubField,
+  onSelectTargetRecord,
 }: ChartGroupByFieldSelectionMorphRelationFieldViewProps) => {
   const { getIcon } = useIcons();
 
@@ -92,11 +96,19 @@ export const ChartGroupByFieldSelectionMorphRelationFieldView = ({
             ? currentSubFieldName
             : undefined
         }
+        isCurrentGroupByField={
+          selectedTarget.perTargetFieldId === currentFieldMetadataId
+        }
         onBack={() => setSelectedTarget(null)}
         onSelectSubField={(subFieldName) =>
           onSelectTargetSubField({
             perTargetFieldId: selectedTarget.perTargetFieldId,
             subFieldName,
+          })
+        }
+        onSelectRecord={() =>
+          onSelectTargetRecord({
+            perTargetFieldId: selectedTarget.perTargetFieldId,
           })
         }
       />
@@ -118,7 +130,7 @@ export const ChartGroupByFieldSelectionMorphRelationFieldView = ({
       <DropdownMenuSeparator />
       <DropdownMenuItemsContainer>
         {availableTargets.length === 0 ? (
-          <MenuItem text={t`No targets available`} />
+          <ListItem disabled>{t`No targets available`}</ListItem>
         ) : (
           <SelectableList
             selectableListInstanceId={dropdownId}
@@ -135,17 +147,24 @@ export const ChartGroupByFieldSelectionMorphRelationFieldView = ({
                   setSelectedTarget(target);
                 }}
               >
-                <MenuItem
-                  text={target.label}
+                <ListItemButton
                   focused={selectedItemId === target.perTargetFieldId}
-                  LeftIcon={
-                    isDefined(target.icon) ? getIcon(target.icon) : undefined
+                  startIcon={
+                    <SelectOptionIcon
+                      Icon={
+                        isDefined(target.icon)
+                          ? getIcon(target.icon)
+                          : undefined
+                      }
+                    />
                   }
-                  hasSubMenu
+                  hasSubmenu
                   onClick={() => {
                     setSelectedTarget(target);
                   }}
-                />
+                >
+                  {target.label}
+                </ListItemButton>
               </SelectableListItem>
             ))}
           </SelectableList>

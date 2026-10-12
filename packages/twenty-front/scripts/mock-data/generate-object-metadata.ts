@@ -33,6 +33,15 @@ const METADATA_QUERY = `
           isLabelSyncedWithName
           isSearchable
           duplicateCriteria
+          searchFieldMetadataList {
+            __typename
+            id
+            fieldMetadataId
+            tsVectorFieldMetadataId
+            position
+            createdAt
+            updatedAt
+          }
           indexMetadataList {
             __typename
             id
@@ -66,6 +75,7 @@ const METADATA_QUERY = `
             isUIEditable
             isNullable
             isUnique
+            isSearchable
             createdAt
             updatedAt
             defaultValue

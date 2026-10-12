@@ -1,5 +1,11 @@
+import {
+  MetadataReadability,
+  ObjectOpenRecordIn,
+  ObjectSharingReach,
+} from 'twenty-shared/types';
 import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { generateAggregateQuery } from '@/object-record/utils/generateAggregateQuery';
+import { MetadataWritability } from '~/generated-metadata/graphql';
 
 describe('generateAggregateQuery', () => {
   it('should generate correct aggregate query', () => {
@@ -19,11 +25,16 @@ describe('generateAggregateQuery', () => {
       readableFields: [],
       updatableFields: [],
       indexMetadatas: [],
+      searchFieldMetadatas: [],
       isLabelSyncedWithName: true,
       isRemote: false,
       isSystem: false,
       isUIEditable: true,
       isUICreatable: true,
+      writability: MetadataWritability.OPEN,
+      openRecordIn: ObjectOpenRecordIn.USER_CHOICE,
+      sharingReach: ObjectSharingReach.WORKSPACE,
+      readability: MetadataReadability.OPEN,
     };
 
     const mockRecordGqlFields = {
@@ -62,11 +73,16 @@ describe('generateAggregateQuery', () => {
       readableFields: [],
       updatableFields: [],
       indexMetadatas: [],
+      searchFieldMetadatas: [],
       isLabelSyncedWithName: true,
       isRemote: false,
       isSystem: false,
       isUIEditable: true,
       isUICreatable: true,
+      writability: MetadataWritability.OPEN,
+      openRecordIn: ObjectOpenRecordIn.USER_CHOICE,
+      sharingReach: ObjectSharingReach.WORKSPACE,
+      readability: MetadataReadability.OPEN,
     };
 
     const mockRecordGqlFields = {

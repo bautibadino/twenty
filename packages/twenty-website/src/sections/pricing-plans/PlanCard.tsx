@@ -1,11 +1,11 @@
 'use client';
 
-import { msg } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react';
 import { css } from '@linaria/core';
 import { styled } from '@linaria/react';
 import NextImage from 'next/image';
 
+import { TalkToUsButton } from '@/contact-cal';
 import { useAnimatedNumber } from '@/platform/motion';
 import { color, mediaUp, radius, semanticColor, spacing } from '@/tokens';
 import { Body, Button, Heading } from '@/ui';
@@ -57,9 +57,7 @@ const CardHeaderInfo = styled.div`
   }
 `;
 
-// The title and price guard against long localized strings: they ellipsis
-// (or, for the price line, hold one line) on desktop where the two cards
-// share the row width. Ported from the old card.
+// Guards long localized strings where the two cards share the row on desktop.
 const titleClassName = css`
   overflow: hidden;
   text-overflow: ellipsis;
@@ -142,6 +140,7 @@ export function PlanCard({
   const { i18n } = useLingui();
   const tier = PLANS_DATA[tierId];
   const cell = tier.cells[hosting][billing];
+  const cta = tier.cta[hosting];
   const iconWidth = tier.icon.widthPx ?? 80;
   const animatedPriceValue = useAnimatedNumber(cell.price.value);
   const { comparisonBulletTexts, phase, visibleBullets } = useFeatureTransition(
@@ -159,11 +158,11 @@ export function PlanCard({
             size="xs"
             weight="light"
           >
-            {i18n._(tier.heading)}
+            {i18n._(tier.heading[hosting])}
           </Heading>
           <PriceLine>
             <Heading as="h4" family="sans" size="sm" weight="regular">
-              {`${cell.price.prefix}${PRICE_NUMBER_FORMATTER.format(animatedPriceValue)}`}
+              {`${cell.price.prefix}${PRICE_NUMBER_FORMATTER.format(animatedPriceValue)}${cell.price.valueSuffix ?? ''}`}
             </Heading>
             <Body as="span" className={priceSuffixClassName} size="sm">
               {i18n._(cell.price.suffix)}
@@ -190,11 +189,18 @@ export function PlanCard({
       />
 
       <CtaRow>
-        <Button
-          href="https://app.twenty.com/welcome"
-          label={i18n._(msg`Start for free`)}
-          variant={highlighted ? 'filled' : 'outlined'}
-        />
+        {cta.href !== undefined ? (
+          <Button
+            href={cta.href}
+            label={i18n._(cta.label)}
+            variant={highlighted ? 'filled' : 'outlined'}
+          />
+        ) : (
+          <TalkToUsButton
+            label={cta.label}
+            variant={highlighted ? 'filled' : 'outlined'}
+          />
+        )}
       </CtaRow>
     </CardShell>
   );

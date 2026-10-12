@@ -13,6 +13,7 @@ import { RoleTargetService } from 'src/engine/metadata-modules/role-target/servi
 import { RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
 import { InjectWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/inject-workspace-scoped-repository.decorator';
 import { WorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/workspace-scoped-repository';
+import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
 @Injectable()
 export class AiAgentRoleService {
   constructor(
@@ -23,7 +24,23 @@ export class AiAgentRoleService {
     @InjectWorkspaceScopedRepository(RoleTargetEntity)
     private readonly roleTargetRepository: WorkspaceScopedRepository<RoleTargetEntity>,
     private readonly roleTargetService: RoleTargetService,
+    private readonly workspaceCacheService: WorkspaceCacheService,
   ) {}
+
+  public async findAgentRoleId({
+    workspaceId,
+    agentId,
+  }: {
+    workspaceId: string;
+    agentId: string;
+  }): Promise<string | undefined> {
+    const { flatRoleTargetByAgentIdMaps } =
+      await this.workspaceCacheService.getOrRecompute(workspaceId, [
+        'flatRoleTargetByAgentIdMaps',
+      ]);
+
+    return flatRoleTargetByAgentIdMaps[agentId]?.roleId;
+  }
 
   public async assignRoleToAgent({
     workspaceId,
@@ -196,6 +213,10 @@ export class AiAgentRoleService {
 
     if (remainingAssignments === 0) {
       await this.roleRepository.delete(workspaceId, { id: roleId });
+      await this.workspaceCacheService.invalidateAndRecompute(workspaceId, [
+        'flatRoleMaps',
+        'flatRolePermissionFlagMaps',
+      ]);
     }
   }
 }

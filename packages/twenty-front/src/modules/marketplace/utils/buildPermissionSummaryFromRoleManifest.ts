@@ -1,12 +1,12 @@
 import { type RoleManifest } from 'twenty-shared/application';
-import { isDefined } from 'twenty-shared/utils';
+import { capitalize, isDefined } from 'twenty-shared/utils';
 import {
-  IconCode,
   type IconComponent,
-  IconCurrencyDollar,
-  IconDatabase,
+  IconAddressBook,
+  IconCreditCard,
   IconHierarchy,
   IconKey,
+  IconPlug,
   IconSettings,
   IconSettingsAutomation,
   IconSparkles,
@@ -53,14 +53,14 @@ export const buildPermissionSummaryFromRoleManifest = (
           capabilities[capabilities.length - 1];
 
     items.push({
-      Icon: IconDatabase,
-      label: label.charAt(0).toUpperCase() + label.slice(1) + ' records',
+      Icon: IconAddressBook,
+      label: capitalize(label) + ' records',
     });
   }
 
   if ((defaultRole.objectPermissions ?? []).length > 0 && items.length === 0) {
     items.push({
-      Icon: IconDatabase,
+      Icon: IconAddressBook,
       label: 'Access specific object records',
     });
   }
@@ -109,11 +109,11 @@ export const buildPermissionSummaryFromRoleManifest = (
     },
     [SystemPermissionFlag.BILLING]: {
       label: 'Manage billing',
-      Icon: IconCurrencyDollar,
+      Icon: IconCreditCard,
     },
     [SystemPermissionFlag.API_KEYS_AND_WEBHOOKS]: {
-      label: 'Manage API keys and webhooks',
-      Icon: IconCode,
+      label: 'Manage MCP, API keys, and webhooks',
+      Icon: IconPlug,
     },
     [SystemPermissionFlag.AI]: {
       label: 'Run AI agents',

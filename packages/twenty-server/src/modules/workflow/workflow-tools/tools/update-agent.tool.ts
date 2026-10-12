@@ -1,4 +1,5 @@
 import { isDefined } from 'twenty-shared/utils';
+import { WorkflowActionType } from 'twenty-shared/workflow';
 import { z } from 'zod';
 
 import { type AgentResponseFormat } from 'src/engine/metadata-modules/ai/ai-agent/types/agent-response-format.type';
@@ -53,12 +54,65 @@ const updateAgentSchema = z.object({
     ),
 });
 
+const resyncAiAgentStepOutputSchemas = async (
+  deps: Pick<
+    WorkflowToolDependencies,
+    | 'coreWorkflowVersionListService'
+    | 'coreWorkflowVersionMutationService'
+    | 'flatEntityMapsCacheService'
+  >,
+  {
+    workspaceId,
+    userWorkspaceId,
+    agentId,
+  }: {
+    workspaceId: string;
+    userWorkspaceId: string | undefined;
+    agentId: string;
+  },
+): Promise<void> => {
+  await deps.flatEntityMapsCacheService.invalidateFlatEntityMaps({
+    workspaceId,
+    flatMapsKeys: ['flatAgentMaps'],
+  });
+
+  const draftCoreVersions =
+    await deps.coreWorkflowVersionListService.findDraftCoreWorkflowVersions({
+      workspaceId,
+    });
+
+  for (const draftCoreVersion of draftCoreVersions) {
+    const matchingStep = draftCoreVersion.steps?.find(
+      (step) =>
+        step.type === WorkflowActionType.AI_AGENT &&
+        step.settings?.input?.agentId === agentId,
+    );
+
+    if (!isDefined(matchingStep)) {
+      continue;
+    }
+
+    await deps.coreWorkflowVersionMutationService.updateStep({
+      workspaceId,
+      userWorkspaceId,
+      coreWorkflowVersionId: draftCoreVersion.id,
+      step: matchingStep,
+    });
+  }
+};
+
 export const createUpdateAgentTool = (
-  deps: Pick<WorkflowToolDependencies, 'agentService'>,
+  deps: Pick<
+    WorkflowToolDependencies,
+    | 'agentService'
+    | 'coreWorkflowVersionListService'
+    | 'coreWorkflowVersionMutationService'
+    | 'flatEntityMapsCacheService'
+  >,
   context: WorkflowToolContext,
 ) => ({
   name: 'update_agent' as const,
-  description: `Update the AI agent used by a workflow AI_AGENT step.
+  description: `Update the agent used by a workflow AI_AGENT step.
 
 Use this tool to configure the agent created when an AI_AGENT step is added: set its system prompt, the model it should use, and the format of its output.
 
@@ -87,6 +141,22 @@ To find the agentId, look at the AI_AGENT step's settings.input.agentId field.`,
         },
         workspaceId,
       });
+
+      if (isDefined(responseFormat)) {
+        try {
+          await resyncAiAgentStepOutputSchemas(deps, {
+            workspaceId,
+            userWorkspaceId: context.userWorkspaceId,
+            agentId,
+          });
+        } catch (resyncError) {
+          return {
+            success: true,
+            message: `Successfully updated agent ${agentId}, but failed to resync workflow step output schema: ${resyncError.message}`,
+            agentId: updatedAgent.id,
+          };
+        }
+      }
 
       return {
         success: true,

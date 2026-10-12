@@ -1,4 +1,4 @@
-import { defineLogicFunction } from 'twenty-sdk/define';
+import { defineLogicFunction, STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS } from 'twenty-sdk/define';
 
 import { UPDATE_FIELDS_OPTION_VALUES } from 'src/constants/update-fields-option-values';
 import { PDL_LOGIC_FUNCTION_CONSTANTS } from 'src/constants/universal-identifiers';
@@ -28,14 +28,23 @@ export default defineLogicFunction({
         type: 'object',
         properties: {
           records: {
-            type: 'array',
-            items: { type: 'object' },
+            type: 'records',
+            objectUniversalIdentifier:
+              STANDARD_OBJECT_UNIVERSAL_IDENTIFIERS.person.universalIdentifier,
             label: 'Records',
           },
           updateFields: {
             type: 'string',
             label: 'Update fields',
             enum: [...UPDATE_FIELDS_OPTION_VALUES],
+          },
+          minLikelihood: {
+            type: 'number',
+            label: 'Minimum likelihood (1-10)',
+          },
+          weakIdentifierMinLikelihood: {
+            type: 'number',
+            label: 'Minimum likelihood for name-based matches (1-10)',
           },
         },
       },

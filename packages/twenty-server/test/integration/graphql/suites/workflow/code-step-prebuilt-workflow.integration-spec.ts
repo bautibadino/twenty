@@ -5,10 +5,9 @@ import {
   runWorkflowVersion,
   waitForWorkflowCompletion,
 } from 'test/integration/graphql/suites/workflow/utils/workflow-run-test.util';
+import { updateWorkflowVersionTrigger } from 'test/integration/graphql/suites/workflow/utils/update-workflow-version-trigger.util';
 import { updateLogicFunctionSource } from 'test/integration/metadata/suites/logic-function/utils/update-logic-function-source.util';
-import { makeMetadataAPIRequest } from 'test/integration/metadata/suites/utils/make-metadata-api-request.util';
-import { updateFeatureFlag } from 'test/integration/metadata/suites/utils/update-feature-flag.util';
-import { FeatureFlagKey } from 'twenty-shared/types';
+import { makeMetadataApiRequest } from 'test/integration/metadata/suites/utils/make-metadata-api-request.util';
 
 import { LogicFunctionExecutionMode } from 'src/engine/metadata-modules/logic-function/logic-function.entity';
 
@@ -32,12 +31,6 @@ describe('Code step workflow with PREBUILT logic function (e2e)', () => {
   let createdWorkflowRunId: string | null = null;
 
   beforeAll(async () => {
-    await updateFeatureFlag({
-      featureFlag: FeatureFlagKey.IS_LOGIC_FUNCTION_PREBUILT_MODE_ENABLED,
-      value: true,
-      expectToFail: false,
-    });
-
     const createWorkflowResponse = await client
       .post('/graphql')
       .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
@@ -93,22 +86,10 @@ describe('Code step workflow with PREBUILT logic function (e2e)', () => {
       position: { x: 0, y: 0 },
     };
 
-    const updateTriggerResponse = await client
-      .post('/graphql')
-      .set('Authorization', `Bearer ${APPLE_JANE_ADMIN_ACCESS_TOKEN}`)
-      .send({
-        query: `
-          mutation UpdateWorkflowVersion($id: UUID!, $data: WorkflowVersionUpdateInput!) {
-            updateWorkflowVersion(id: $id, data: $data) {
-              id
-            }
-          }
-        `,
-        variables: {
-          id: createdWorkflowVersionId,
-          data: { trigger: manualTrigger },
-        },
-      });
+    const updateTriggerResponse = await updateWorkflowVersionTrigger({
+      workflowVersionId: createdWorkflowVersionId!,
+      trigger: manualTrigger,
+    });
 
     expect(updateTriggerResponse.body.errors).toBeUndefined();
 
@@ -242,16 +223,10 @@ describe('Code step workflow with PREBUILT logic function (e2e)', () => {
           variables: { id: createdWorkflowId },
         });
     }
-
-    await updateFeatureFlag({
-      featureFlag: FeatureFlagKey.IS_LOGIC_FUNCTION_PREBUILT_MODE_ENABLED,
-      value: false,
-      expectToFail: false,
-    });
   });
 
   it('flips the underlying logic function to PREBUILT on workflow activation', async () => {
-    const findLogicFunctionResponse = await makeMetadataAPIRequest({
+    const findLogicFunctionResponse = await makeMetadataApiRequest({
       query: gql`
         query FindOneLogicFunction($input: LogicFunctionIdInput!) {
           findOneLogicFunction(input: $input) {

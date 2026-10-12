@@ -1,7 +1,9 @@
+import { isDefined } from 'twenty-shared/utils';
 import { z } from 'zod';
 
 import { type ToolRegistryService } from 'src/engine/core-modules/tool-provider/services/tool-registry.service';
 import { type ToolContext } from 'src/engine/core-modules/tool-provider/types/tool-context.type';
+import { type ToolOutput } from 'src/engine/core-modules/tool/types/tool-output.type';
 
 export const LEARN_TOOLS_TOOL_NAME = 'learn_tools';
 
@@ -13,7 +15,7 @@ export const learnToolsInputSchema = z.object({
   toolNames: z
     .array(z.string())
     .describe(
-      'Exact tool names. Do not guess tool names. Pass every tool you need to learn in this single array — do not make separate learn_tools calls per tool.',
+      'Tool names to learn. A name you built from the CRUD grammar is fine: unknown names come back under notFound with the closest matching names. Pass every tool you need to learn in this single array — do not make separate learn_tools calls per tool.',
     ),
   aspects: z
     .array(learnToolsAspectSchema)
@@ -37,21 +39,29 @@ export type LearnToolsResult = {
   notFound: string[];
   suggestions?: Record<string, string[]>;
   message: string;
+  spilledTools?: object;
+  warnings?: string[];
+};
+
+export type LearnToolsOptions = {
+  isToolAllowed?: (toolName: string) => boolean;
+  spillLargeOutput?: boolean;
 };
 
 export const createLearnToolsTool = (
   toolRegistry: ToolRegistryService,
   context: ToolContext,
-  excludeTools?: Set<string>,
+  options?: LearnToolsOptions,
 ) => ({
   description:
-    'Get input schemas for tools. Pass all the tool names you need in a single call (toolNames accepts an array) rather than calling learn_tools once per tool. Call this with exact tool names to learn the required arguments before calling execute_tool.',
+    'Get input schemas for tools, and confirm a tool name exists. Pass all the tool names you need in a single call (toolNames accepts an array) rather than calling learn_tools once per tool. A name you built from the CRUD grammar is safe to pass: unknown names come back under notFound with the closest matching names, so you never need a catalog call just to check a name.',
   inputSchema: learnToolsInputSchema,
   execute: async (parameters: LearnToolsInput): Promise<LearnToolsResult> => {
     const { toolNames, aspects } = parameters;
 
-    const allowedNames = excludeTools
-      ? toolNames.filter((name) => !excludeTools.has(name))
+    const { isToolAllowed } = options ?? {};
+    const allowedNames = isToolAllowed
+      ? toolNames.filter((name) => isToolAllowed(name))
       : toolNames;
 
     const toolInfos = await toolRegistry.getToolInfo(
@@ -95,7 +105,7 @@ export const createLearnToolsTool = (
       messageParts.push(`Could not find: ${notFoundDescription}`);
     }
 
-    return {
+    const learnToolsResult: LearnToolsResult = {
       tools: toolInfos,
       notFound,
       ...(Object.keys(suggestions).length > 0 && { suggestions }),
@@ -103,6 +113,37 @@ export const createLearnToolsTool = (
         messageParts.length > 0
           ? `${messageParts.join('. ')}.`
           : 'No matching tools found.',
+    };
+
+    if (options?.spillLargeOutput !== true) {
+      return learnToolsResult;
+    }
+
+    const spillCandidate: ToolOutput = {
+      success: true,
+      message: learnToolsResult.message,
+      result: { tools: learnToolsResult.tools },
+    };
+
+    const spillOutcome = await toolRegistry.spillToolOutputIfTooLarge(
+      spillCandidate,
+      context,
+      LEARN_TOOLS_TOOL_NAME,
+    );
+
+    if (spillOutcome === spillCandidate) {
+      return learnToolsResult;
+    }
+
+    return {
+      ...learnToolsResult,
+      tools: [],
+      ...(isDefined(spillOutcome.result) && {
+        spilledTools: spillOutcome.result,
+      }),
+      ...(isDefined(spillOutcome.warnings) && {
+        warnings: spillOutcome.warnings,
+      }),
     };
   },
 });

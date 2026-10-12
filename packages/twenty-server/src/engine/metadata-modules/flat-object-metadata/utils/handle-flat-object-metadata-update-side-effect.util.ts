@@ -2,10 +2,9 @@ import { type FromTo } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
 import { type AllFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/all-flat-entity-maps.type';
-import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
 import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
+import { computeSearchFieldMetadataToCreateOnLabelIdentifierUpdate } from 'src/engine/metadata-modules/flat-object-metadata/utils/compute-search-field-metadata-to-create-on-label-identifier-update.util';
 import { recomputeIndexAfterFlatObjectMetadataSingularNameUpdate } from 'src/engine/metadata-modules/flat-object-metadata/utils/recompute-index-after-flat-object-metadata-singular-name-update.util';
-import { recomputeSearchVectorOnLabelIdentifierUpdate } from 'src/engine/metadata-modules/flat-object-metadata/utils/recompute-search-vector-on-label-identifier-update.util';
 import { recomputeViewFieldIdentifierAfterFlatObjectIdentifierUpdate } from 'src/engine/metadata-modules/flat-object-metadata/utils/recompute-view-field-identifier-after-flat-object-identifier-update.util';
 import { renameRelatedMorphFieldOnObjectNamesUpdate } from 'src/engine/metadata-modules/flat-object-metadata/utils/rename-related-morph-field-on-object-names-update.util';
 import { type UniversalFlatFieldMetadata } from 'src/engine/workspace-manager/workspace-migration/universal-flat-entity/types/universal-flat-field-metadata.type';
@@ -15,7 +14,6 @@ import { type UniversalFlatViewField } from 'src/engine/workspace-manager/worksp
 
 export type FlatObjectMetadataUpdateSideEffects = {
   otherObjectFlatFieldMetadatasToUpdate: UniversalFlatFieldMetadata[];
-  sameObjectFlatFieldMetadatasToUpdate: UniversalFlatFieldMetadata[];
   flatViewFieldsToUpdate: UniversalFlatViewField[];
   flatViewFieldsToCreate: UniversalFlatViewField[];
   flatIndexMetadatasToUpdate: UniversalFlatIndexMetadata[];
@@ -36,6 +34,12 @@ type HandleFlatObjectMetadataUpdateSideEffectArgs = FromTo<
     | 'flatSearchFieldMetadataMaps'
   >;
 
+// Transitional: the label identifier view-field recompute below duplicates the
+// engine's objectIndexViewLabelIdentifierOnUpdate on the engine INDEX view and
+// mutates caller-owned view rows directly on every other view. Once the
+// override mechanism ships, this per-view maintenance is expected to be
+// re-expressed as overrides instead of direct row mutations; the exact shape
+// is not settled yet.
 export const handleFlatObjectMetadataUpdateSideEffect = ({
   flatIndexMaps,
   flatFieldMetadataMaps,
@@ -55,6 +59,7 @@ export const handleFlatObjectMetadataUpdateSideEffect = ({
           toFlatObjectMetadata,
           flatObjectMetadataMaps,
           flatIndexMaps,
+          systemSideEffectMorphFieldsOnly: false,
         })
       : {
           morphRelatedFlatIndexesToUpdate: [],
@@ -89,19 +94,13 @@ export const handleFlatObjectMetadataUpdateSideEffect = ({
           flatViewFieldsToUpdate: [],
         };
 
-  const sameObjectFlatFieldMetadatasToUpdate: FlatFieldMetadata[] = [];
-
-  const { flatSearchVectorFieldToUpdate, searchFieldMetadatasToCreate } =
-    recomputeSearchVectorOnLabelIdentifierUpdate({
+  const { searchFieldMetadatasToCreate } =
+    computeSearchFieldMetadataToCreateOnLabelIdentifierUpdate({
       fromFlatObjectMetadata,
       toFlatObjectMetadata,
       flatFieldMetadataMaps,
       flatSearchFieldMetadataMaps,
     });
-
-  if (isDefined(flatSearchVectorFieldToUpdate)) {
-    sameObjectFlatFieldMetadatasToUpdate.push(flatSearchVectorFieldToUpdate);
-  }
 
   return {
     flatIndexMetadatasToUpdate: [
@@ -111,7 +110,6 @@ export const handleFlatObjectMetadataUpdateSideEffect = ({
     flatViewFieldsToCreate,
     flatViewFieldsToUpdate,
     otherObjectFlatFieldMetadatasToUpdate: morphFlatFieldMetadatasToUpdate,
-    sameObjectFlatFieldMetadatasToUpdate,
     searchFieldMetadatasToCreate,
   };
 };

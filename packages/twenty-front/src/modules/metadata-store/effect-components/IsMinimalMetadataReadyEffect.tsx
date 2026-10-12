@@ -1,4 +1,4 @@
-import { useHasAccessTokenPair } from '@/auth/hooks/useHasAccessTokenPair';
+import { useIsLogged } from '@/auth/hooks/useIsLogged';
 import { currentUserState } from '@/auth/states/currentUserState';
 import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { isMinimalMetadataReadyState } from '@/metadata-store/states/isMinimalMetadataReadyState';
@@ -8,10 +8,10 @@ import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomState
 import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
 import { useEffect } from 'react';
 import { isDefined } from 'twenty-shared/utils';
-import { isWorkspaceActiveOrSuspended } from 'twenty-shared/workspace';
+import { isWorkspaceProvisioned } from 'twenty-shared/workspace';
 
 export const IsMinimalMetadataReadyEffect = () => {
-  const hasAccessTokenPair = useHasAccessTokenPair();
+  const isLogged = useIsLogged();
   const currentUser = useAtomStateValue(currentUserState);
   const currentWorkspace = useAtomStateValue(currentWorkspaceState);
   const metadataStoreObjectMetadataItems = useAtomFamilyStateValue(
@@ -35,12 +35,12 @@ export const IsMinimalMetadataReadyEffect = () => {
   );
 
   useEffect(() => {
-    if (!hasAccessTokenPair) {
+    if (!isLogged) {
       setIsMinimalMetadataReady(true);
       return;
     }
 
-    const hasActiveWorkspace = isWorkspaceActiveOrSuspended(currentWorkspace);
+    const hasProvisionedWorkspace = isWorkspaceProvisioned(currentWorkspace);
 
     const areObjectsLoaded =
       metadataStoreObjectMetadataItems.status === 'up-to-date' &&
@@ -55,13 +55,13 @@ export const IsMinimalMetadataReadyEffect = () => {
     }
 
     const isReady =
-      isDefined(currentUser) && (!hasActiveWorkspace || areViewsLoaded);
+      isDefined(currentUser) && (!hasProvisionedWorkspace || areViewsLoaded);
 
     if (isReady) {
       setIsMinimalMetadataReady(true);
     }
   }, [
-    hasAccessTokenPair,
+    isLogged,
     currentUser,
     currentWorkspace,
     metadataStoreObjectMetadataItems.status,

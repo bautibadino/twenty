@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { billingState } from '@/client-config/states/billingState';
 import { isClickHouseConfiguredState } from '@/client-config/states/isClickHouseConfiguredState';
+import { useNumberFormat } from '@/localization/hooks/useNumberFormat';
 import { SettingsEmptyPlaceholder } from '@/settings/components/SettingsEmptyPlaceholder';
 import { SettingsOptionCardContentButton } from '@/settings/components/SettingsOptions/SettingsOptionCardContentButton';
 import { EventLogFilters } from '@/settings/event-logs/components/EventLogFilters';
@@ -14,6 +15,7 @@ import { useEventLogsLiveStream } from '@/settings/event-logs/hooks/useEventLogs
 import { useEventLogs } from '@/settings/event-logs/hooks/useQueryEventLogs';
 import { type EventLogFiltersState } from '@/settings/event-logs/types/EventLogFiltersState';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { checkIfBillingEntitlementIsEnabledOnWorkspace } from '@/workspace/utils/checkIfBillingEntitlementIsEnabledOnWorkspace';
 import { SettingsPath } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 import {
@@ -22,9 +24,10 @@ import {
   IconPlayerPause,
   IconPlayerPlay,
 } from 'twenty-ui/icon';
-import { Button, IconButton } from 'twenty-ui/input';
-import { Card } from 'twenty-ui/surfaces';
-import { themeCssVariables } from 'twenty-ui/theme-constants';
+import { Button } from 'twenty-ui/primitives/input';
+import { IconButton } from 'twenty-ui/components/input';
+import { Card } from 'twenty-ui/primitives/surfaces';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 import {
   BillingEntitlementKey,
@@ -89,6 +92,7 @@ const RECORDS_PER_PAGE = 100;
 
 export const SettingsLogs = () => {
   const { t } = useLingui();
+  const { formatNumber } = useNumberFormat();
 
   const currentWorkspace = useAtomStateValue(currentWorkspaceState);
   const isClickHouseConfigured = useAtomStateValue(isClickHouseConfiguredState);
@@ -96,12 +100,10 @@ export const SettingsLogs = () => {
   const navigateSettings = useNavigateSettings();
 
   const isBillingEnabled = billing?.isBillingEnabled ?? false;
-  const hasAuditLogsEntitlement =
-    currentWorkspace?.billingEntitlements?.some(
-      (entitlement) =>
-        entitlement.key === BillingEntitlementKey.AUDIT_LOGS &&
-        entitlement.value,
-    ) === true;
+  const hasAuditLogsEntitlement = checkIfBillingEntitlementIsEnabledOnWorkspace(
+    BillingEntitlementKey.AUDIT_LOGS,
+    currentWorkspace,
+  );
 
   const [selectedTable, setSelectedTable] = useState<EventLogTable>(
     EventLogTable.PAGEVIEW,
@@ -142,7 +144,7 @@ export const SettingsLogs = () => {
     isDefined(filters.dateRange?.start) ||
     isDefined(filters.dateRange?.end);
 
-  const liveRecords = useEventLogsLiveStream({
+  const { liveRecords } = useEventLogsLiveStream({
     table: selectedTable,
     enabled: !isPaused && !hasActiveFilters && canQuery,
   });
@@ -162,29 +164,28 @@ export const SettingsLogs = () => {
   };
 
   const renderUpgradeCard = () => (
-    <Card rounded backgroundColor={themeCssVariables.background.secondary}>
+    <Card.Root rounded backgroundColor={themeCssVariables.background.secondary}>
       <SettingsOptionCardContentButton
         Icon={IconLock}
         title={t`Upgrade to access audit logs`}
-        description={t`Only application logs are available on your current plan. Other log types require an Enterprise subscription.`}
+        description={t`Only application logs are available on your current plan. Other log types require an Organization subscription.`}
         Button={
           <Button
-            title={t`Upgrade`}
-            variant="primary"
-            accent="blue"
-            size="small"
-            Icon={IconArrowUp}
+            size="sm"
+            startIcon={<IconArrowUp />}
             onClick={() =>
               navigateSettings(
                 isBillingEnabled
-                  ? SettingsPath.Billing
-                  : SettingsPath.AdminPanelEnterprise,
+                  ? SettingsPath.BillingPlans
+                  : SettingsPath.AdminPanelOrganization,
               )
             }
-          />
+            variant="solid"
+            color="accent"
+          >{t`Upgrade`}</Button>
         }
       />
-    </Card>
+    </Card.Root>
   );
 
   const renderResults = () => {
@@ -214,7 +215,7 @@ export const SettingsLogs = () => {
 
     return (
       <StyledResults>
-        <StyledRecordCount>{t`${displayedRecords.length} of ${totalCount + liveRecords.length}`}</StyledRecordCount>
+        <StyledRecordCount>{t`${formatNumber(displayedRecords.length)} of ${formatNumber(totalCount + liveRecords.length)}`}</StyledRecordCount>
         <StyledTableWrapper>
           <EventLogResultsTable
             records={displayedRecords}
@@ -230,7 +231,7 @@ export const SettingsLogs = () => {
 
   return (
     <StyledRoot>
-      <Card
+      <Card.Root
         rounded
         fullWidth
         backgroundColor={themeCssVariables.background.secondary}
@@ -245,12 +246,13 @@ export const SettingsLogs = () => {
             </StyledSelectorGrow>
             {canQuery && (
               <IconButton
-                Icon={isPaused ? IconPlayerPlay : IconPlayerPause}
-                variant="secondary"
-                size="medium"
-                ariaLabel={isPaused ? t`Resume` : t`Pause`}
+                variant="outline"
+                size="md"
+                aria-label={isPaused ? t`Resume` : t`Pause`}
                 onClick={() => setIsPaused((previous) => !previous)}
-              />
+              >
+                {isPaused ? <IconPlayerPlay /> : <IconPlayerPause />}
+              </IconButton>
             )}
           </StyledSelectorRow>
           <EventLogFilters
@@ -259,7 +261,7 @@ export const SettingsLogs = () => {
             onChange={handleFiltersChange}
           />
         </StyledCardContent>
-      </Card>
+      </Card.Root>
 
       {renderResults()}
     </StyledRoot>

@@ -1,6 +1,7 @@
 export type OnboardingConfig = {
   importContactsCreditsReward: number;
-  inviteTeamMaxCreditsReward: number;
   inviteTeamCreditsRewardPerUser: number;
+  createProfileCreditsReward: number;
   upgradeCreditsReward: number;
+  inviteTeamMaxInvites: number;
 };

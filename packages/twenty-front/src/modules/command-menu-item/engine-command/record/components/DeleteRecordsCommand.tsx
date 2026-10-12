@@ -1,3 +1,9 @@
+import { DeleteCoreWorkflowsCommand } from '@/object-core/workflows/components/DeleteCoreWorkflowsCommand';
+import { useIsWorkflowCoreEnabled } from '@/workflow/hooks/useIsWorkflowCoreEnabled';
+import {
+  CoreObjectNameSingular,
+  type RecordGqlOperationFilter,
+} from 'twenty-shared/types';
 import { HeadlessEngineCommandWrapperEffect } from '@/command-menu-item/engine-command/components/HeadlessEngineCommandWrapperEffect';
 import { useHeadlessCommandContextApi } from '@/command-menu-item/engine-command/hooks/useHeadlessCommandContextApi';
 import { useRemoveNavigationMenuItemByTargetRecordId } from '@/navigation-menu-item/common/hooks/useRemoveNavigationMenuItemByTargetRecordId';
@@ -5,27 +11,29 @@ import { useNavigationMenuItemsData } from '@/navigation-menu-item/display/hooks
 import { DEFAULT_QUERY_PAGE_SIZE } from '@/object-record/constants/DefaultQueryPageSize';
 import { useIncrementalDeleteManyRecords } from '@/object-record/hooks/useIncrementalDeleteManyRecords';
 import { useRemoveSelectedRecordsFromRecordBoard } from '@/object-record/record-board/hooks/useRemoveSelectedRecordsFromRecordBoard';
-import { useResetTableRowSelection } from '@/object-record/record-table/hooks/internal/useResetTableRowSelection';
+import { PLACEHOLDER_RECORD_INDEX_ID } from '@/object-record/record-index/constants/PlaceholderRecordIndexId';
+import { useResetRecordSelection } from '@/object-record/record-selection/hooks/useResetRecordSelection';
 import { useSidePanelMenu } from '@/side-panel/hooks/useSidePanelMenu';
-import { type RecordGqlOperationFilter } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 
-export const DeleteRecordsCommand = () => {
+const DeleteWorkspaceRecordsCommand = () => {
   const { recordIndexId, objectMetadataItem, selectedRecords, graphqlFilter } =
     useHeadlessCommandContextApi();
 
-  if (!isDefined(recordIndexId) || !isDefined(objectMetadataItem)) {
-    throw new Error(
-      'Record index ID and object metadata are required to delete records',
-    );
+  if (!isDefined(objectMetadataItem)) {
+    throw new Error('Object metadata is required to delete records');
   }
 
   const recordId = selectedRecords[0]?.id;
 
-  const { resetTableRowSelection } = useResetTableRowSelection(recordIndexId);
+  const { resetRecordSelection } = useResetRecordSelection(
+    recordIndexId ?? PLACEHOLDER_RECORD_INDEX_ID,
+  );
 
   const { removeSelectedRecordsFromRecordBoard } =
-    useRemoveSelectedRecordsFromRecordBoard(recordIndexId);
+    useRemoveSelectedRecordsFromRecordBoard(
+      recordIndexId ?? PLACEHOLDER_RECORD_INDEX_ID,
+    );
 
   const noMatchFilter: RecordGqlOperationFilter = { id: { in: [] } };
 
@@ -45,8 +53,10 @@ export const DeleteRecordsCommand = () => {
   const { closeSidePanelMenu } = useSidePanelMenu();
 
   const handleExecute = async () => {
-    removeSelectedRecordsFromRecordBoard();
-    resetTableRowSelection();
+    if (isDefined(recordIndexId)) {
+      removeSelectedRecordsFromRecordBoard();
+      resetRecordSelection();
+    }
     closeSidePanelMenu();
 
     if (isDefined(recordId)) {
@@ -68,4 +78,15 @@ export const DeleteRecordsCommand = () => {
   };
 
   return <HeadlessEngineCommandWrapperEffect execute={handleExecute} />;
+};
+
+export const DeleteRecordsCommand = () => {
+  const isCore = useIsWorkflowCoreEnabled();
+  const { objectMetadataItem } = useHeadlessCommandContextApi();
+  return isCore &&
+    objectMetadataItem?.nameSingular === CoreObjectNameSingular.Workflow ? (
+    <DeleteCoreWorkflowsCommand />
+  ) : (
+    <DeleteWorkspaceRecordsCommand />
+  );
 };

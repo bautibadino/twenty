@@ -22,13 +22,15 @@ export class UpsertRecordService {
   ) {}
 
   async execute(params: UpsertRecordParams): Promise<ToolOutput> {
-    const { objectName, objectRecord, authContext } = params;
+    const { objectName, objectRecord, authContext, rolePermissionConfig } =
+      params;
 
     try {
       const { queryRunnerContext, selectedFields, flatObjectMetadata } =
         await this.commonApiContextBuilder.build({
           authContext,
           objectName,
+          rolePermissionConfig,
         });
 
       if (
@@ -42,11 +44,8 @@ export class UpsertRecordService {
         );
       }
 
-      // Clean undefined values from the record data (including nested composite fields)
-      // This prevents validation errors for partial composite field inputs
       const cleanedRecord = removeUndefinedFromRecord(objectRecord);
 
-      // Use Common API with upsert flag - it handles conflict detection automatically
       const { results: upsertedRecord } =
         await this.commonCreateOneRunner.execute(
           {

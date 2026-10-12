@@ -5,9 +5,9 @@ import { ObjectOptionsDropdownFieldsContent } from '@/object-record/object-optio
 import { ObjectOptionsDropdownHiddenFieldsContent } from '@/object-record/object-options-dropdown/components/ObjectOptionsDropdownHiddenFieldsContent';
 import { ObjectOptionsDropdownHiddenRecordGroupsContent } from '@/object-record/object-options-dropdown/components/ObjectOptionsDropdownHiddenRecordGroupsContent';
 import { ObjectOptionsDropdownLayoutContent } from '@/object-record/object-options-dropdown/components/ObjectOptionsDropdownLayoutContent';
-import { ObjectOptionsDropdownLayoutOpenInContent } from '@/object-record/object-options-dropdown/components/ObjectOptionsDropdownLayoutOpenInContent';
 import { ObjectOptionsDropdownMenuContent } from '@/object-record/object-options-dropdown/components/ObjectOptionsDropdownMenuContent';
 import { ObjectOptionsDropdownRecordGroupFieldsContent } from '@/object-record/object-options-dropdown/components/ObjectOptionsDropdownRecordGroupFieldsContent';
+import { ObjectOptionsDropdownRecordGroupLoadLimitContent } from '@/object-record/object-options-dropdown/components/ObjectOptionsDropdownRecordGroupLoadLimitContent';
 import { ObjectOptionsDropdownRecordGroupsContent } from '@/object-record/object-options-dropdown/components/ObjectOptionsDropdownRecordGroupsContent';
 import { ObjectOptionsDropdownRecordGroupSortContent } from '@/object-record/object-options-dropdown/components/ObjectOptionsDropdownRecordGroupSortContent';
 import { ObjectOptionsDropdownVisibilityContent } from '@/object-record/object-options-dropdown/components/ObjectOptionsDropdownVisibilityContent';
@@ -19,8 +19,6 @@ export const ObjectOptionsDropdownContent = () => {
   switch (currentContentId) {
     case 'layout':
       return <ObjectOptionsDropdownLayoutContent />;
-    case 'layoutOpenIn':
-      return <ObjectOptionsDropdownLayoutOpenInContent />;
     case 'fields':
       return <ObjectOptionsDropdownFieldsContent />;
     case 'hiddenFields':
@@ -31,6 +29,8 @@ export const ObjectOptionsDropdownContent = () => {
       return <ObjectOptionsDropdownRecordGroupFieldsContent />;
     case 'recordGroupSort':
       return <ObjectOptionsDropdownRecordGroupSortContent />;
+    case 'recordGroupLoadLimit':
+      return <ObjectOptionsDropdownRecordGroupLoadLimitContent />;
     case 'hiddenRecordGroups':
       return <ObjectOptionsDropdownHiddenRecordGroupsContent />;
     case 'addRecordGroup':

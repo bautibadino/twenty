@@ -2,19 +2,24 @@ import { appNameState } from '@/client-config/states/appNameState';
 import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 import { Helmet } from '@dr.pogodin/react-helmet';
 
+import { useWorkspaceSurface } from '@/ui/layout/hooks/useWorkspaceSurface';
+
 type PageTitleProps = {
   title: string;
 };
 
-/**
- * Punto único donde se arma el <title> de la pestaña, así que el sufijo con el
- * nombre del producto se aplica a todas las páginas sin tocarlas una por una.
- */
+// Single place where the tab <title> is built, so the product name suffix
+// applies to every page without touching them one by one.
 export const PageTitle = (props: PageTitleProps) => {
   const appName = useAtomStateValue(appNameState);
+  const workspaceSurface = useWorkspaceSurface();
 
-  // Evita "PymeInteligente CRM · PymeInteligente CRM" en las páginas cuyo
-  // título ya es el nombre del producto.
+  if (workspaceSurface.type === 'side-panel') {
+    return null;
+  }
+
+  // Avoids "PymeInteligente CRM · PymeInteligente CRM" on pages whose title is
+  // already the product name.
   const title = props.title.includes(appName)
     ? props.title
     : `${props.title} · ${appName}`;

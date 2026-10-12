@@ -5,6 +5,7 @@ import {
   ViewFilterGroupLogicalOperator,
   ViewFilterOperand,
   ViewSortDirection,
+  ViewType,
 } from 'twenty-shared/types';
 import { isDefined } from 'twenty-shared/utils';
 import { IsNull } from 'typeorm';
@@ -15,6 +16,7 @@ import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadat
 import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
 import { addFlatEntityToFlatEntityMapsOrThrow } from 'src/engine/metadata-modules/flat-entity/utils/add-flat-entity-to-flat-entity-maps-or-throw.util';
 import { findFlatEntityByIdInFlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/utils/find-flat-entity-by-id-in-flat-entity-maps.util';
+import { resolveEffectiveFlatEntity } from 'src/engine/metadata-modules/overrides/utils/resolve-effective-flat-entity.util';
 import { resolveEntityRelationUniversalIdentifiers } from 'src/engine/metadata-modules/flat-entity/utils/resolve-entity-relation-universal-identifiers.util';
 import { splitEntitiesByRemovalStrategy } from 'src/engine/metadata-modules/flat-entity/utils/split-entities-by-removal-strategy.util';
 import { type FlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/flat-field-metadata.type';
@@ -29,9 +31,10 @@ import { type FlatViewFilter } from 'src/engine/metadata-modules/flat-view-filte
 import { getDefaultViewFilterOperand } from 'src/engine/metadata-modules/flat-view-filter/utils/get-default-view-filter-operand.util';
 import { type FlatViewSort } from 'src/engine/metadata-modules/flat-view-sort/types/flat-view-sort.type';
 import { type FlatViewMaps } from 'src/engine/metadata-modules/flat-view/types/flat-view-maps.type';
+import { fromUpdateViewInputToFlatViewToUpdateOrThrow } from 'src/engine/metadata-modules/flat-view/utils/from-update-view-input-to-flat-view-to-update-or-throw.util';
 import { WidgetConfigurationType } from 'src/engine/metadata-modules/page-layout-widget/enums/widget-configuration-type.type';
-import { isCallerOverridingEntity } from 'src/engine/metadata-modules/utils/is-caller-overriding-entity.util';
-import { sanitizeOverridableEntityInput } from 'src/engine/metadata-modules/utils/sanitize-overridable-entity-input.util';
+import { isCallerOverridingEntity } from 'src/engine/metadata-modules/overrides/utils/is-caller-overriding-entity.util';
+import { sanitizeOverridableEntityInput } from 'src/engine/metadata-modules/overrides/utils/sanitize-overridable-entity-input.util';
 import { type UpsertViewWidgetViewFieldInput } from 'src/engine/metadata-modules/view/dtos/inputs/upsert-view-widget-view-field.input';
 import { type UpsertViewWidgetViewFilterGroupInput } from 'src/engine/metadata-modules/view/dtos/inputs/upsert-view-widget-view-filter-group.input';
 import { type UpsertViewWidgetViewFilterInput } from 'src/engine/metadata-modules/view/dtos/inputs/upsert-view-widget-view-filter.input';
@@ -46,6 +49,7 @@ import { InjectWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace
 import { WorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/workspace-scoped-repository';
 import { WorkspaceMigrationBuilderException } from 'src/engine/workspace-manager/workspace-migration/exceptions/workspace-migration-builder-exception';
 import { WorkspaceMigrationValidateBuildAndRunService } from 'src/engine/workspace-manager/workspace-migration/services/workspace-migration-validate-build-and-run-service';
+import { resolveEffectiveFlatEntityProperty } from 'src/engine/metadata-modules/overrides/utils/resolve-effective-flat-entity-property.util';
 
 const EMPTY_FIELD_OPS = {
   fieldsToCreate: [] as FlatViewField[],
@@ -69,6 +73,13 @@ const EMPTY_SORT_OPS = {
   sortsToUpdate: [] as FlatViewSort[],
   sortsToRemove: [] as FlatViewSort[],
 };
+
+const ALLOWED_WIDGET_VIEW_TYPES: ViewType[] = [
+  ViewType.TABLE_WIDGET,
+  ViewType.KANBAN_WIDGET,
+  ViewType.LIST_WIDGET,
+  ViewType.CALENDAR_WIDGET,
+];
 
 @Injectable()
 export class ViewWidgetUpsertService {
@@ -102,6 +113,7 @@ export class ViewWidgetUpsertService {
       flatViewFilterGroupMaps,
       flatViewSortMaps,
       flatViewMaps,
+      flatViewGroupMaps,
     } =
       await this.workspaceManyOrAllFlatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
         {
@@ -114,6 +126,7 @@ export class ViewWidgetUpsertService {
             'flatViewFilterGroupMaps',
             'flatViewSortMaps',
             'flatViewMaps',
+            'flatViewGroupMaps',
           ],
         },
       );
@@ -181,11 +194,24 @@ export class ViewWidgetUpsertService {
       now: new Date().toISOString(),
     };
 
+    if (isDefined(input.view)) {
+      if (
+        isDefined(input.view.type) &&
+        !ALLOWED_WIDGET_VIEW_TYPES.includes(input.view.type)
+      ) {
+        throw new ViewException(
+          t`Widget views must use a widget view type`,
+          ViewExceptionCode.INVALID_VIEW_DATA,
+        );
+      }
+    }
+
     if (
       !isDefined(input.viewFields) &&
       !isDefined(input.viewFilterGroups) &&
       !isDefined(input.viewFilters) &&
-      !isDefined(input.viewSorts)
+      !isDefined(input.viewSorts) &&
+      !isDefined(input.view)
     ) {
       const view = await this.viewRepository.findOne(
         upsertContext.workspaceId,
@@ -211,7 +237,14 @@ export class ViewWidgetUpsertService {
       flatViewFieldMaps.byUniversalIdentifier,
     )
       .filter(isDefined)
-      .filter((field) => field.isActive && field.viewId === viewId);
+      .filter(
+        (field) =>
+          resolveEffectiveFlatEntityProperty({
+            metadataName: 'viewField',
+            flatEntity: field,
+            property: 'isActive',
+          }) && field.viewId === viewId,
+      );
 
     const existingViewFilters = Object.values(
       flatViewFilterMaps.byUniversalIdentifier,
@@ -282,10 +315,27 @@ export class ViewWidgetUpsertService {
         })
       : EMPTY_SORT_OPS;
 
+    const viewUpdateOperations = isDefined(input.view)
+      ? fromUpdateViewInputToFlatViewToUpdateOrThrow({
+          updateViewInput: {
+            id: viewId,
+            ...input.view,
+          },
+          flatViewMaps,
+          flatViewGroupMaps,
+          flatFieldMetadataMaps,
+          callerApplicationUniversalIdentifier:
+            upsertContext.applicationUniversalIdentifier,
+          workspaceCustomApplicationUniversalIdentifier:
+            upsertContext.applicationUniversalIdentifier,
+        })
+      : undefined;
+
     const {
       toHardDelete: filterGroupsToDelete,
       toDeactivate: filterGroupsToDeactivate,
     } = splitEntitiesByRemovalStrategy({
+      metadataName: 'viewFilterGroup',
       entitiesToRemove: viewFilterGroupOperations.filterGroupsToRemove,
       workspaceCustomApplicationUniversalIdentifier:
         upsertContext.applicationUniversalIdentifier,
@@ -294,6 +344,7 @@ export class ViewWidgetUpsertService {
 
     const { toHardDelete: filtersToDelete, toDeactivate: filtersToDeactivate } =
       splitEntitiesByRemovalStrategy({
+        metadataName: 'viewFilter',
         entitiesToRemove: viewFilterOperations.filtersToRemove,
         workspaceCustomApplicationUniversalIdentifier:
           upsertContext.applicationUniversalIdentifier,
@@ -302,6 +353,7 @@ export class ViewWidgetUpsertService {
 
     const { toHardDelete: sortsToDelete, toDeactivate: sortsToDeactivate } =
       splitEntitiesByRemovalStrategy({
+        metadataName: 'viewSort',
         entitiesToRemove: viewSortOperations.sortsToRemove,
         workspaceCustomApplicationUniversalIdentifier:
           upsertContext.applicationUniversalIdentifier,
@@ -312,6 +364,22 @@ export class ViewWidgetUpsertService {
       await this.workspaceMigrationValidateBuildAndRunService.validateBuildAndRunWorkspaceMigration(
         {
           allFlatEntityOperationByMetadataName: {
+            view: {
+              flatEntityToCreate: [],
+              flatEntityToDelete: [],
+              flatEntityToUpdate: isDefined(viewUpdateOperations)
+                ? [viewUpdateOperations.flatViewToUpdate]
+                : [],
+            },
+            viewGroup: {
+              flatEntityToCreate: isDefined(viewUpdateOperations)
+                ? viewUpdateOperations.flatViewGroupsToCreate
+                : [],
+              flatEntityToDelete: isDefined(viewUpdateOperations)
+                ? viewUpdateOperations.flatViewGroupsToDelete
+                : [],
+              flatEntityToUpdate: [],
+            },
             viewField: {
               flatEntityToCreate: viewFieldOperations.fieldsToCreate,
               flatEntityToDelete: [],
@@ -418,20 +486,19 @@ export class ViewWidgetUpsertService {
         existingFieldByViewFieldId ?? existingFieldByFieldMetadataId;
 
       if (isDefined(existingField)) {
-        const resolvedIsVisible = isDefined(existingField.overrides?.isVisible)
-          ? existingField.overrides.isVisible
-          : existingField.isVisible;
-        const resolvedPosition = isDefined(existingField.overrides?.position)
-          ? existingField.overrides.position
-          : existingField.position;
-        const resolvedSize = isDefined(existingField.overrides?.size)
-          ? existingField.overrides.size
-          : existingField.size;
+        const effectiveExistingField = resolveEffectiveFlatEntity({
+          metadataName: 'viewField',
+          flatEntity: existingField,
+        });
 
         const hasChanged =
-          resolvedIsVisible !== inputField.isVisible ||
-          resolvedPosition !== inputField.position ||
-          (isDefined(inputField.size) && resolvedSize !== inputField.size);
+          effectiveExistingField.isVisible !== inputField.isVisible ||
+          effectiveExistingField.position !== inputField.position ||
+          (isDefined(inputField.size) &&
+            effectiveExistingField.size !== inputField.size) ||
+          (inputField.aggregateOperation !== undefined &&
+            effectiveExistingField.aggregateOperation !==
+              inputField.aggregateOperation);
 
         if (!hasChanged) {
           continue;
@@ -454,8 +521,15 @@ export class ViewWidgetUpsertService {
               isVisible: inputField.isVisible,
               position: inputField.position,
               ...(isDefined(inputField.size) ? { size: inputField.size } : {}),
+              ...(inputField.aggregateOperation !== undefined
+                ? { aggregateOperation: inputField.aggregateOperation }
+                : {}),
             },
             shouldOverride,
+            callerApplicationUniversalIdentifier:
+              applicationUniversalIdentifier,
+            workspaceCustomApplicationUniversalIdentifier:
+              applicationUniversalIdentifier,
           });
 
         const updatedField: FlatViewField = {
@@ -520,7 +594,7 @@ export class ViewWidgetUpsertService {
         isVisible: inputField.isVisible,
         size: inputField.size ?? DEFAULT_VIEW_FIELD_SIZE,
         position: inputField.position,
-        aggregateOperation: null,
+        aggregateOperation: inputField.aggregateOperation ?? null,
         overrides: null,
         universalOverrides: null,
         isActive: true,

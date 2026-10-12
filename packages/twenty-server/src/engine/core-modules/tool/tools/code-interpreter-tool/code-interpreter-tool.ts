@@ -1,3 +1,7 @@
+import { isDefined } from 'twenty-shared/utils';
+import { isUserAuthContext } from 'src/engine/core-modules/auth/guards/is-user-auth-context.guard';
+import { workspaceAuthContextStorage } from 'src/engine/core-modules/auth/storage/workspace-auth-context.storage';
+import { type ApplicationAccessTokenJwtPayload } from 'src/engine/core-modules/auth/types/application-access-token-jwt-payload.type';
 import { Injectable, Logger } from '@nestjs/common';
 
 import path from 'path';
@@ -19,7 +23,7 @@ import { ApplicationService } from 'src/engine/core-modules/application/applicat
 import { type AccessTokenJwtPayload } from 'src/engine/core-modules/auth/types/access-token-jwt-payload.type';
 import { JwtTokenTypeEnum } from 'src/engine/core-modules/auth/types/jwt-token-type.enum';
 import { CodeInterpreterService } from 'src/engine/core-modules/code-interpreter/code-interpreter.service';
-import { FileStorageService } from 'src/engine/core-modules/file-storage/file-storage.service';
+import { FileStorageService } from 'src/engine/core-modules/file-storage/services/file-storage.service';
 import { FileUrlService } from 'src/engine/core-modules/file/file-url/file-url.service';
 import { FileService } from 'src/engine/core-modules/file/services/file.service';
 import { JwtWrapperService } from 'src/engine/core-modules/jwt/services/jwt-wrapper.service';
@@ -113,11 +117,17 @@ export class CodeInterpreterTool implements Tool {
       );
 
       const serverUrl = this.twentyConfigService.get('SERVER_URL');
-      const sessionToken = await this.generateSessionToken(
+      const authContext = workspaceAuthContextStorage.getStore();
+      const applicationId =
+        isDefined(authContext) && isUserAuthContext(authContext)
+          ? authContext.application?.id
+          : undefined;
+      const sessionToken = await this.generateSessionToken({
         workspaceId,
         userId,
         userWorkspaceId,
-      );
+        applicationId,
+      });
 
       this.logger.debug(
         `MCP session: workspaceId=${workspaceId}, userId=${userId}, userWorkspaceId=${userWorkspaceId}, serverUrl=${serverUrl}`,
@@ -134,6 +144,7 @@ export class CodeInterpreterTool implements Tool {
             TWENTY_API_TOKEN: sessionToken,
           },
           sessionId: threadId ? `${workspaceId}:${threadId}` : undefined,
+          actorKey: `${userWorkspaceId ?? 'anonymous'}:${applicationId ?? 'direct'}`,
         },
         {
           onStdout: (line) => {
@@ -304,19 +315,35 @@ export class CodeInterpreterTool implements Tool {
     return inputFiles;
   }
 
-  private async generateSessionToken(
-    workspaceId: string,
-    userId?: string,
-    userWorkspaceId?: string,
-  ): Promise<string> {
-    const payload: AccessTokenJwtPayload = {
-      sub: userId ?? workspaceId,
-      type: JwtTokenTypeEnum.ACCESS,
-      workspaceId,
-      userId: userId ?? workspaceId,
-      userWorkspaceId: userWorkspaceId ?? workspaceId,
-      authProvider: AuthProviderEnum.Password,
-    };
+  private async generateSessionToken({
+    workspaceId,
+    userId,
+    userWorkspaceId,
+    applicationId,
+  }: {
+    workspaceId: string;
+    userId?: string;
+    userWorkspaceId?: string;
+    applicationId?: string;
+  }): Promise<string> {
+    const payload: AccessTokenJwtPayload | ApplicationAccessTokenJwtPayload =
+      isDefined(applicationId)
+        ? {
+            sub: applicationId,
+            type: JwtTokenTypeEnum.APPLICATION_ACCESS,
+            workspaceId,
+            applicationId,
+            userId,
+            userWorkspaceId,
+          }
+        : {
+            sub: userId ?? workspaceId,
+            type: JwtTokenTypeEnum.ACCESS,
+            workspaceId,
+            userId: userId ?? workspaceId,
+            userWorkspaceId: userWorkspaceId ?? workspaceId,
+            authProvider: AuthProviderEnum.Password,
+          };
 
     return this.jwtWrapperService.signAsyncOrThrow(payload, {
       expiresIn: '5m',
