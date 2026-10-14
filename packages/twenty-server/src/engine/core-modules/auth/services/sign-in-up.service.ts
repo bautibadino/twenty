@@ -642,7 +642,7 @@ export class SignInUpService {
 
   async signUpOnNewWorkspace(
     userData: ExistingUserOrPartialUserWithPicture['userData'],
-    options?: { displayName?: string; subdomain?: string },
+    options?: { displayName?: string; subdomain?: string; partner?: string },
   ) {
     const email =
       userData.type === 'newUserWithPicture'
@@ -813,6 +813,7 @@ export class SignInUpService {
           userEmail: email,
           workspaceId: workspace.id,
           workspaceDisplayName: workspace.displayName,
+          partner: options?.partner,
         });
       }
 
