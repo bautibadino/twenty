@@ -1,11 +1,16 @@
+import { type I18n } from '@lingui/core';
 import { Img } from 'react-email';
-import { getAppName, getEmailLogoUrl } from 'src/utils/branding';
+import { getEmailLogoUrl, withAppName } from 'src/utils/branding';
 
 const logoStyle = {
   marginBottom: '40px',
 };
 
-export const Logo = () => {
+type LogoProps = {
+  i18n: I18n;
+};
+
+export const Logo = ({ i18n }: LogoProps) => {
   const logoUrl = getEmailLogoUrl();
 
   // Sin logo servible preferimos no renderizar nada antes que una imagen rota.
@@ -18,7 +23,7 @@ export const Logo = () => {
   return (
     <Img
       src={logoUrl}
-      alt={`${getAppName()} logo`}
+      alt={withAppName(i18n._('Twenty logo'))}
       height="40"
       style={logoStyle}
     />

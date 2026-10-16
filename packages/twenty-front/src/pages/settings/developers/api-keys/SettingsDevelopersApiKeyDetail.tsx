@@ -34,7 +34,7 @@ import {
   RevokeApiKeyDocument,
 } from '~/generated-metadata/graphql';
 import { useNavigateSettings } from '~/hooks/useNavigateSettings';
-import { SETTINGS_API_WEBHOOKS_TABS } from '@/settings/developers/constants/SettingsApiWebhooksTabs';
+import { SETTINGS_DEVELOPERS_TABS } from '@/settings/developers/constants/SettingsDevelopersTabs';
 
 const StyledInfo = styled.span`
   color: ${themeCssVariables.font.color.light};
@@ -146,11 +146,11 @@ export const SettingsDevelopersApiKeyDetail = () => {
       });
       if (redirect) {
         navigate(
-          SettingsPath.ApiWebhooks,
+          SettingsPath.Developers,
           undefined,
           undefined,
           undefined,
-          SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.API,
+          SETTINGS_DEVELOPERS_TABS.TABS_IDS.API,
         );
       }
     } catch {
@@ -175,6 +175,7 @@ export const SettingsDevelopersApiKeyDetail = () => {
     }
 
     if (!isDefined(roleIdToUse)) {
+      // oxlint-disable-next-line lingui/no-unlocalized-strings -- Keep this developer invariant stable for error grouping.
       throw new Error('Role not selected - this should never happen');
     }
 
@@ -258,12 +259,12 @@ export const SettingsDevelopersApiKeyDetail = () => {
               href: getSettingsPath(SettingsPath.General),
             },
             {
-              children: t`MCP & APIs`,
+              children: t`Developers`,
               href: getSettingsPath(
-                SettingsPath.ApiWebhooks,
+                SettingsPath.Developers,
                 undefined,
                 undefined,
-                SETTINGS_API_WEBHOOKS_TABS.TABS_IDS.API,
+                SETTINGS_DEVELOPERS_TABS.TABS_IDS.API,
               ),
             },
             { children: apiKey.name || t`Unnamed API Key` },

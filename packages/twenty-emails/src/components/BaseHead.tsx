@@ -1,12 +1,17 @@
+import { type I18n } from '@lingui/core';
 import { Font, Head } from 'react-email';
 
 import { canvasTheme } from 'src/common-style';
-import { getAppName } from 'src/utils/branding';
+import { withAppName } from 'src/utils/branding';
 
-export const BaseHead = () => {
+type BaseHeadProps = {
+  i18n: I18n;
+};
+
+export const BaseHead = ({ i18n }: BaseHeadProps) => {
   return (
     <Head>
-      <title>{`${getAppName()} email`}</title>
+      <title>{withAppName(i18n._('Twenty email'))}</title>
       <Font
         fontFamily={canvasTheme.font.family}
         fallbackFontFamily="sans-serif"

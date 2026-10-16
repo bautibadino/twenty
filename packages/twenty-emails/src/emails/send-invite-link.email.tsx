@@ -70,7 +70,7 @@ export const SendInviteLinkEmail = ({
             src={workspaceLogo}
             width={40}
             height={40}
-            alt="Workspace logo"
+            alt={i18n._('Workspace logo')}
           />
         ) : (
           <></>
