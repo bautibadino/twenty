@@ -1,9 +1,9 @@
-// oxlint-disable lingui/no-unlocalized-strings -- KeyboardEvent.key values must match browser APIs.
 import { useDirection } from '@base-ui/react/direction-provider';
 import { useState, type KeyboardEvent } from 'react';
 
 import { isDefined } from '@ui/utilities/utils/isDefined';
 
+import { dropdownItemActivation } from './dropdownItemActivation';
 import { getDropdownItemLabel } from './getDropdownItemLabel';
 import { getDropdownItems } from './getDropdownItems';
 import { getDropdownRows } from './getDropdownRows';
@@ -13,11 +13,13 @@ import { getDropdownTrigger } from './getDropdownTrigger';
 import { getNextDropdownGridItem } from './getNextDropdownGridItem';
 import { getNextDropdownItem } from './getNextDropdownItem';
 import { useDropdownContext } from './useDropdownContext';
+import { doNotTranslate } from '@ui/utilities/internal/doNotTranslate';
 
 const TYPEAHEAD_RESET_DELAY = 500;
 
 export const useDropdownKeyboardNavigation = () => {
-  const { type, isSubmenu, setOpen, closeTree } = useDropdownContext();
+  const { type, isSubmenu, setOpen, closeTree, tabForwardOutOfTree } =
+    useDropdownContext();
   const direction = useDirection();
   const [typeahead, setTypeahead] = useState({ text: '', timestamp: 0 });
 
@@ -40,7 +42,9 @@ export const useDropdownKeyboardNavigation = () => {
       'input,textarea,select,[contenteditable="true"]',
     );
     const isRightToLeft = direction === 'rtl';
-    const backwardKey = isRightToLeft ? 'ArrowRight' : 'ArrowLeft';
+    const backwardKey = doNotTranslate(
+      isRightToLeft ? 'ArrowRight' : 'ArrowLeft',
+    );
     const isSubmenuBackwardKey =
       isSubmenu && !isEditable && event.key === backwardKey;
     const backwardGridItem =
@@ -79,6 +83,15 @@ export const useDropdownKeyboardNavigation = () => {
       return;
     }
 
+    if (type === 'menu' && event.key === 'Tab' && isSubmenu) {
+      event.preventDefault();
+      tabForwardOutOfTree({
+        ownerDocument: content.ownerDocument,
+        tabOutEvent: event.nativeEvent,
+      });
+      return;
+    }
+
     const search = getDropdownSearch(content);
     const isSearch = target === search;
     if (isEditable && !isSearch) {
@@ -93,7 +106,10 @@ export const useDropdownKeyboardNavigation = () => {
 
     if (isDefined(searchTarget)) {
       event.preventDefault();
-      searchTarget.click();
+      dropdownItemActivation.activate({
+        item: searchTarget,
+        event: event.nativeEvent,
+      });
       return;
     }
 
