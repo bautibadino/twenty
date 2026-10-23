@@ -59,13 +59,7 @@ const StyledSeparator = styled.span`
   color: ${themeCssVariables.font.color.tertiary};
 `;
 
-type FooterNoteProps = {
-  secondaryAgreement?: 'privacyPolicy' | 'dataProcessingAgreement';
-};
-
-export const FooterNote = ({
-  secondaryAgreement = 'privacyPolicy',
-}: FooterNoteProps) => {
+export const FooterNote = () => {
   const { isOnAWorkspace } = useIsCurrentLocationOnAWorkspace();
   const appName = useAtomStateValue(appNameState);
   const { i18n } = useLingui();
@@ -85,23 +79,13 @@ export const FooterNote = ({
           <Trans>Terms of Service</Trans>
         </a>{' '}
         <Trans>and</Trans>{' '}
-        {secondaryAgreement === 'dataProcessingAgreement' ? (
-          <a
-            href="https://twenty.com/legal/dpa"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Trans>Data Processing Agreement</Trans>
-          </a>
-        ) : (
-          <a
-            href={getTwentyWebsiteUrl(i18n.locale, 'privacy-policy')}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Trans>Privacy Policy</Trans>
-          </a>
-        )}
+        <a
+          href={getTwentyWebsiteUrl(i18n.locale, 'privacy-policy')}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Trans>Privacy Policy</Trans>
+        </a>
         .
       </StyledCopyContainer>
     );
