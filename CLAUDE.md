@@ -58,3 +58,45 @@ npx nx run twenty-front:graphql:generate      # after GraphQL schema changes (--
 - **Entity file changes need a generated instance command**: `npx nx run twenty-server:database:migrate:generate --name <name> --type <fast|slow>` (slow = adds a data-backfill step).
 - A read-only Postgres MCP server is configured in `.mcp.json` for inspecting workspace data, metadata, and migration results. Writes go through the CLI commands above.
 - E2E login: click "Continue with Email" and use the prefilled credentials.
+
+## Fork de Bautista (`bautibadino/twenty`)
+
+Este repo es un fork. `upstream` es twentyhq/twenty y se mergea por versión (`merge: upstream twenty/vX into fork`). Lo propio del fork vive en esta sección, al final del archivo, para que los merges de upstream no choquen. `AGENTS.md` es un symlink a este archivo: Codex y Claude leen lo mismo.
+
+### Comunicación
+
+Castellano. Frases cortas, una idea por frase, voz activa. Arrancar con el resultado o la acción. Sin preámbulos ni resúmenes. Términos técnicos sólo si hacen falta.
+
+### Pedidos de clientes: configuración antes que código
+
+Los clientes (por ejemplo Grupo Sport) piden cosas que Twenty ya resuelve sin código: invitar miembros, idioma por usuario (Settings > Experience), campos custom (Settings > Data model), vistas y filtros, dashboards con gráficos agrupados (`modules/dashboards`, `modules/page-layout`), roles. Antes de planear código, verificar si alcanza con configurar. Configurar la instancia de un cliente es una operación remota: pedir la URL y el OK explícito antes.
+
+### Coordinador y subagentes
+
+El agente que recibe el mensaje es el coordinador. Procesa el prompt, escribe un plan corto (qué, qué archivos, qué queda afuera, qué hay que preguntar) y, si hay una decisión de producto, pregunta y espera. Después orquesta workers. No implementa el diff grande.
+
+Tarea muy rápida (la hace el coordinador solo) si cumple todo: cabe en un archivo o es una pregunta de lectura, no cruza front y server, no pide diseño, y no toca auth, permisos, workspace, migraciones ni upgrade commands. Si duda, no es rápida.
+
+Los workers se abren con Orca. La herramienta nativa de subagentes de Claude Code sólo ofrece modelos Claude; los workers GPT salen de `orca`. No decirle al usuario que no se puede usar GPT sin correr antes `orca orchestration worker-start --help`.
+
+- `twenty-server`, datos, análisis e investigación: Codex, `gpt-5.6-terra`, esfuerzo `high`.
+- `twenty-front` y `twenty-ui`: Claude Sonnet, esfuerzo `high`.
+
+```bash
+orca orchestration run-create --objective "<objetivo en una frase>" --json
+orca orchestration task-create --spec "<brief>" --task-title "<título corto>" --json
+orca orchestration worker-start --task <task_id> --worktree current --agent codex --model gpt-5.6-terra --effort high --json
+orca orchestration worker-start --task <task_id> --worktree current --agent claude --model sonnet --effort high --json
+orca orchestration worker-show --dispatch <dispatch_id> --json
+orca orchestration worker-read --dispatch <dispatch_id> --json
+```
+
+Si Orca rechaza el id del modelo, frenar y preguntar. No sustituir por otro modelo.
+
+El brief de cada Task trae: objetivo, archivos permitidos, qué queda afuera, comandos de verificación exactos (de la sección Commands) y formato del reporte: archivos tocados, `<comando>: <resultado>` por verificación, y pendientes. Tasks sin archivos en común corren en paralelo; dos workers nunca escriben el mismo archivo.
+
+El coordinador revisa el diff, corre una verificación y reporta. Un follow-up por Task si no cumple. Los workers no hacen deploy, no tocan instancias de clientes y no hacen push.
+
+### Memoria
+
+Usar engram: `mem_search` antes de arrancar algo con historia, `mem_save` para decisiones, causas raíz y gotchas. Lo estable y repetido va a este archivo, no sólo a engram.
